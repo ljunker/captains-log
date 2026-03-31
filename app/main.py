@@ -22,6 +22,7 @@ from app.schemas import EntryCreate, EntryListResponse, EntryRead, EntryUpdate
 BASE_DIR = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "app" / "templates"))
 API_KEY_COOKIE_NAME = "captains_log_api_key"
+INLINE_CSS = (BASE_DIR / "app" / "static" / "style.css").read_text(encoding="utf-8")
 
 
 @asynccontextmanager
@@ -99,7 +100,6 @@ def read_home(request: Request) -> HTMLResponse:
     valid_query_key = settings.api_key and request.query_params.get("api_key") == settings.api_key
     query_suffix = f"?{urlencode({'api_key': settings.api_key})}" if valid_query_key else ""
     docs_path = f"{settings.root_path}/docs" if settings.root_path else "/docs"
-    static_css_path = f"{settings.root_path}/static/style.css" if settings.root_path else "/static/style.css"
 
     return templates.TemplateResponse(
         request=request,
@@ -108,7 +108,7 @@ def read_home(request: Request) -> HTMLResponse:
             "app_name": settings.app_name,
             "root_path": settings.root_path,
             "docs_path": f"{docs_path}{query_suffix}",
-            "static_css_path": f"{static_css_path}{query_suffix}",
+            "inline_css": INLINE_CSS,
         },
     )
 
