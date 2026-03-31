@@ -232,6 +232,21 @@ kbd {
     font-family: var(--sans);
 }
 
+.entry-times {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.entry-update {
+    color: var(--muted);
+}
+
+.hidden {
+    display: none;
+}
+
 .entry-content {
     margin: 0 0 10px;
     line-height: 1.45;

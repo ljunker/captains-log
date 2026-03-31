@@ -58,7 +58,10 @@
 <template id="entry-template">
     <article class="entry-card">
         <div class="entry-meta">
-            <span class="entry-date"></span>
+            <div class="entry-times">
+                <span class="entry-date"></span>
+                <span class="entry-update hidden"></span>
+            </div>
             <span class="entry-id"></span>
         </div>
         <p class="entry-content"></p>
@@ -140,6 +143,12 @@
         }).format(new Date(value));
     }
 
+    function hasMeaningfulUpdate(createdAt, updatedAt) {
+        const created = new Date(createdAt).getTime();
+        const updated = new Date(updatedAt).getTime();
+        return Number.isFinite(created) && Number.isFinite(updated) && Math.abs(updated - created) >= 1000;
+    }
+
     function formatDay(value) {
         return new Intl.DateTimeFormat("de-DE", {
             weekday: "long",
@@ -189,9 +198,15 @@
         for (const entry of entries) {
             const fragment = template.content.cloneNode(true);
             const card = fragment.querySelector(".entry-card");
-            fragment.querySelector(".entry-date").textContent = formatTime(entry.updated_at);
+            fragment.querySelector(".entry-date").textContent = formatTime(entry.created_at);
             fragment.querySelector(".entry-id").textContent = `#${entry.id}`;
             fragment.querySelector(".entry-content").textContent = entry.content;
+
+            const updateElement = fragment.querySelector(".entry-update");
+            if (hasMeaningfulUpdate(entry.created_at, entry.updated_at)) {
+                updateElement.textContent = `Update: ${formatTime(entry.updated_at)}`;
+                updateElement.classList.remove("hidden");
+            }
 
             card.querySelector('[data-action="edit"]').addEventListener("click", () => openComposer(entry));
             card.querySelector('[data-action="delete"]').addEventListener("click", async () => {
