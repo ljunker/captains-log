@@ -15,7 +15,8 @@ RUN mkdir -p /data
 ENV DATABASE_URL=sqlite:////data/captains_log.db \
     APP_HOST=0.0.0.0 \
     APP_PORT=8000 \
-    API_KEY=
+    API_KEY= \
+    APP_ROOT_PATH=
 
 EXPOSE 8000
 

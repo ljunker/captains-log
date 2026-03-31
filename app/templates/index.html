@@ -16,7 +16,7 @@
                 <p id="entry-count" class="entry-count"></p>
             </div>
             <div class="entries-toolbar">
-                <a class="ghost-link" href="/docs">Swagger</a>
+                <a class="ghost-link" href="{{ docs_path }}">Swagger</a>
                 <button type="button" id="previous-day-button" class="secondary">← Tag zurück</button>
                 <button type="button" id="next-day-button" class="secondary">Tag vor →</button>
                 <button type="button" id="refresh-button" class="secondary">Aktualisieren</button>
@@ -87,10 +87,16 @@
     const composerBackdrop = document.getElementById("composer-backdrop");
     const composerMode = document.getElementById("composer-mode");
     const composerTitle = document.getElementById("composer-title");
+    const rootPath = {{ root_path|tojson }};
 
     let currentDay = null;
     let previousDay = null;
     let nextDay = null;
+
+    function appUrl(path) {
+        const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+        return `${rootPath}${normalizedPath}`;
+    }
 
     function setStatus(message, isError = false) {
         formStatus.textContent = message;
@@ -149,7 +155,7 @@
 
     async function fetchEntries(day = null) {
         const query = day ? `?day=${encodeURIComponent(day)}` : "";
-        const response = await fetch(`/api/entries${query}`);
+        const response = await fetch(appUrl(`/api/entries${query}`));
         if (!response.ok) {
             throw new Error("Einträge konnten nicht geladen werden.");
         }
@@ -191,7 +197,7 @@
                     return;
                 }
 
-                const response = await fetch(`/api/entries/${entry.id}`, {method: "DELETE"});
+                const response = await fetch(appUrl(`/api/entries/${entry.id}`), {method: "DELETE"});
                 if (!response.ok) {
                     setStatus("Löschen fehlgeschlagen.", true);
                     return;
@@ -228,7 +234,7 @@
 
         const entryId = entryIdInput.value;
         const method = entryId ? "PUT" : "POST";
-        const url = entryId ? `/api/entries/${entryId}` : "/api/entries";
+        const url = entryId ? appUrl(`/api/entries/${entryId}`) : appUrl("/api/entries");
 
         const response = await fetch(url, {
             method,

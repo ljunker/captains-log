@@ -14,6 +14,7 @@ class Settings:
     sqlite_path = Path(os.getenv("SQLITE_PATH", BASE_DIR / "data" / "captains_log.db"))
     database_url = os.getenv("DATABASE_URL", f"sqlite:///{sqlite_path}")
     api_key = os.getenv("API_KEY")
+    root_path = os.getenv("APP_ROOT_PATH", "").rstrip("/")
 
 
 settings = Settings()

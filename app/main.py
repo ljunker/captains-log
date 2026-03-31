@@ -34,6 +34,7 @@ app = FastAPI(
     description="Kleine Tagebuch-App mit Web-Oberfläche, SQLite-Speicher und CRUD-API.",
     version="0.1.0",
     lifespan=lifespan,
+    root_path=settings.root_path,
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
@@ -77,7 +78,13 @@ async def require_api_key(request: Request, call_next):
     if header_key == configured_api_key or cookie_key == configured_api_key or query_key == configured_api_key:
         response = await call_next(request)
         if query_key == configured_api_key and cookie_key != configured_api_key:
-            response.set_cookie(API_KEY_COOKIE_NAME, configured_api_key, httponly=True, samesite="lax")
+            response.set_cookie(
+                API_KEY_COOKIE_NAME,
+                configured_api_key,
+                httponly=True,
+                samesite="lax",
+                path=settings.root_path or "/",
+            )
         return response
 
     return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": "Invalid or missing API key"})
@@ -88,7 +95,11 @@ def read_home(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"app_name": settings.app_name},
+        context={
+            "app_name": settings.app_name,
+            "root_path": settings.root_path,
+            "docs_path": f"{settings.root_path}/docs" if settings.root_path else "/docs",
+        },
     )
 
 

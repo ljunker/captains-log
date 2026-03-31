@@ -8,6 +8,7 @@ services:
       APP_HOST: 0.0.0.0
       APP_PORT: 8000
       API_KEY: ${API_KEY:-}
+      APP_ROOT_PATH: ${APP_ROOT_PATH:-}
     ports:
       - "127.0.0.1:${HOST_PORT:-8000}:8000"
     volumes:
