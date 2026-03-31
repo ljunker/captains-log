@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ app_name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
+</head>
+<body>
+<main class="shell">
+    <section class="entries-shell">
+        <div class="entries-head">
+            <div class="entries-title">
+                <p class="eyebrow">Tagesansicht</p>
+                <h1 id="day-label">Dein Logbuch</h1>
+                <p id="entry-count" class="entry-count"></p>
+            </div>
+            <div class="entries-toolbar">
+                <a class="ghost-link" href="/docs">Swagger</a>
+                <button type="button" id="previous-day-button" class="secondary">← Tag zurück</button>
+                <button type="button" id="next-day-button" class="secondary">Tag vor →</button>
+                <button type="button" id="refresh-button" class="secondary">Aktualisieren</button>
+                <button type="button" id="open-composer-button">Eintrag schreiben</button>
+            </div>
+        </div>
+        <section class="shortcut-strip">
+            <span class="shortcut-pill"><kbd>C</kbd> Neuer Eintrag</span>
+            <span class="shortcut-pill"><kbd>Enter</kbd> Speichern</span>
+            <span class="shortcut-pill"><kbd>Shift</kbd> + <kbd>Enter</kbd> Zeilenumbruch</span>
+        </section>
+        <div id="entries-list" class="entries-list"></div>
+    </section>
+</main>
+
+<div id="composer-backdrop" class="composer-backdrop hidden" aria-hidden="true">
+    <section class="composer-card" aria-labelledby="composer-title">
+        <div class="composer-head">
+            <div>
+                <p id="composer-mode" class="eyebrow">Neuer Eintrag</p>
+                <h2 id="composer-title">Kurz festhalten, bevor es wieder weg ist.</h2>
+            </div>
+            <button type="button" id="close-composer-button" class="icon-button" aria-label="Schließen">×</button>
+        </div>
+
+        <input type="hidden" id="entry-id">
+        <textarea id="content" name="content" rows="8" placeholder="Was soll heute festgehalten werden?" required></textarea>
+
+        <div class="composer-foot">
+            <p id="form-status" class="status" aria-live="polite"></p>
+            <div class="composer-actions">
+                <button type="button" id="cancel-button" class="secondary">Abbrechen</button>
+                <button type="button" id="save-button">Speichern</button>
+            </div>
+        </div>
+    </section>
+</div>
+
+<template id="entry-template">
+    <article class="entry-card">
+        <div class="entry-meta">
+            <span class="entry-date"></span>
+            <span class="entry-id"></span>
+        </div>
+        <p class="entry-content"></p>
+        <div class="card-actions">
+            <button type="button" data-action="edit">Bearbeiten</button>
+            <button type="button" data-action="delete" class="danger">Löschen</button>
+        </div>
+    </article>
+</template>
+
+<script>
+    const entryIdInput = document.getElementById("entry-id");
+    const contentInput = document.getElementById("content");
+    const formStatus = document.getElementById("form-status");
+    const entriesList = document.getElementById("entries-list");
+    const template = document.getElementById("entry-template");
+    const refreshButton = document.getElementById("refresh-button");
+    const previousDayButton = document.getElementById("previous-day-button");
+    const nextDayButton = document.getElementById("next-day-button");
+    const dayLabel = document.getElementById("day-label");
+    const entryCount = document.getElementById("entry-count");
+    const openComposerButton = document.getElementById("open-composer-button");
+    const closeComposerButton = document.getElementById("close-composer-button");
+    const cancelButton = document.getElementById("cancel-button");
+    const saveButton = document.getElementById("save-button");
+    const composerBackdrop = document.getElementById("composer-backdrop");
+    const composerMode = document.getElementById("composer-mode");
+    const composerTitle = document.getElementById("composer-title");
+
+    let currentDay = null;
+    let previousDay = null;
+    let nextDay = null;
+
+    function setStatus(message, isError = false) {
+        formStatus.textContent = message;
+        formStatus.classList.toggle("error", isError);
+    }
+
+    function resetComposer() {
+        entryIdInput.value = "";
+        contentInput.value = "";
+        composerMode.textContent = "Neuer Eintrag";
+        composerTitle.textContent = "Kurz festhalten, bevor es wieder weg ist.";
+        setStatus("");
+    }
+
+    function openComposer(entry = null) {
+        if (entry) {
+            entryIdInput.value = entry.id;
+            contentInput.value = entry.content;
+            composerMode.textContent = "Eintrag bearbeiten";
+            composerTitle.textContent = `Eintrag #${entry.id} anpassen.`;
+        } else {
+            resetComposer();
+        }
+
+        composerBackdrop.classList.remove("hidden");
+        composerBackdrop.setAttribute("aria-hidden", "false");
+        window.requestAnimationFrame(() => contentInput.focus());
+    }
+
+    function closeComposer() {
+        composerBackdrop.classList.add("hidden");
+        composerBackdrop.setAttribute("aria-hidden", "true");
+        resetComposer();
+    }
+
+    function formatTime(value) {
+        return new Intl.DateTimeFormat("de-DE", {
+            timeStyle: "short",
+        }).format(new Date(value));
+    }
+
+    function formatDay(value) {
+        return new Intl.DateTimeFormat("de-DE", {
+            weekday: "long",
+            day: "2-digit",
+            month: "long",
+            year: "numeric",
+        }).format(new Date(`${value}T00:00:00`));
+    }
+
+    function updateDayButtons() {
+        previousDayButton.disabled = !previousDay;
+        nextDayButton.disabled = !nextDay;
+        dayLabel.textContent = currentDay ? formatDay(currentDay) : "Dein Logbuch";
+    }
+
+    async function fetchEntries(day = null) {
+        const query = day ? `?day=${encodeURIComponent(day)}` : "";
+        const response = await fetch(`/api/entries${query}`);
+        if (!response.ok) {
+            throw new Error("Einträge konnten nicht geladen werden.");
+        }
+        return response.json();
+    }
+
+    function renderEntries(payload) {
+        currentDay = payload.day;
+        previousDay = payload.previous_day;
+        nextDay = payload.next_day;
+        updateDayButtons();
+
+        const entries = payload.entries;
+        entryCount.textContent = `${entries.length} ${entries.length === 1 ? "Eintrag" : "Einträge"}`;
+        entriesList.innerHTML = "";
+
+        if (entries.length === 0) {
+            entriesList.innerHTML = `
+                <article class="empty-card">
+                    <p class="eyebrow">Leer</p>
+                    <h3>Für diesen Tag gibt es noch keinen Eintrag.</h3>
+                    <p>Drück einfach <strong>C</strong> und schreib direkt los.</p>
+                </article>
+            `;
+            return;
+        }
+
+        for (const entry of entries) {
+            const fragment = template.content.cloneNode(true);
+            const card = fragment.querySelector(".entry-card");
+            fragment.querySelector(".entry-date").textContent = formatTime(entry.updated_at);
+            fragment.querySelector(".entry-id").textContent = `#${entry.id}`;
+            fragment.querySelector(".entry-content").textContent = entry.content;
+
+            card.querySelector('[data-action="edit"]').addEventListener("click", () => openComposer(entry));
+            card.querySelector('[data-action="delete"]').addEventListener("click", async () => {
+                const confirmed = window.confirm("Diesen Eintrag wirklich löschen?");
+                if (!confirmed) {
+                    return;
+                }
+
+                const response = await fetch(`/api/entries/${entry.id}`, {method: "DELETE"});
+                if (!response.ok) {
+                    setStatus("Löschen fehlgeschlagen.", true);
+                    return;
+                }
+
+                if (entryIdInput.value === String(entry.id)) {
+                    closeComposer();
+                }
+
+                setStatus(`Eintrag #${entry.id} gelöscht.`);
+                await loadEntries(currentDay);
+            });
+
+            entriesList.appendChild(fragment);
+        }
+    }
+
+    async function loadEntries(day = currentDay) {
+        const selectedDay = typeof day === "string" ? day : currentDay;
+        try {
+            const payload = await fetchEntries(selectedDay);
+            renderEntries(payload);
+        } catch (error) {
+            entriesList.innerHTML = '<article class="empty-card error"><h3>Einträge konnten nicht geladen werden.</h3></article>';
+        }
+    }
+
+    async function saveEntry() {
+        const content = contentInput.value.trim();
+        if (!content) {
+            setStatus("Bitte erst etwas schreiben.", true);
+            return;
+        }
+
+        const entryId = entryIdInput.value;
+        const method = entryId ? "PUT" : "POST";
+        const url = entryId ? `/api/entries/${entryId}` : "/api/entries";
+
+        const response = await fetch(url, {
+            method,
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({content}),
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            setStatus(error.detail || "Speichern fehlgeschlagen.", true);
+            return;
+        }
+
+        const savedEntry = await response.json();
+        const targetDay = entryId ? currentDay : null;
+        closeComposer();
+        setStatus(`Eintrag #${savedEntry.id} gespeichert.`);
+        await loadEntries(targetDay);
+    }
+
+    function isTypingContext() {
+        const activeElement = document.activeElement;
+        return activeElement instanceof HTMLTextAreaElement || activeElement instanceof HTMLInputElement || activeElement?.isContentEditable;
+    }
+
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && !composerBackdrop.classList.contains("hidden")) {
+            event.preventDefault();
+            closeComposer();
+            return;
+        }
+
+        if (
+            event.key.toLowerCase() === "c" &&
+            !event.ctrlKey &&
+            !event.metaKey &&
+            !event.altKey &&
+            !isTypingContext()
+        ) {
+            event.preventDefault();
+            openComposer();
+        }
+    });
+
+    contentInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            saveEntry();
+        }
+    });
+
+    refreshButton.addEventListener("click", () => loadEntries());
+    previousDayButton.addEventListener("click", () => loadEntries(previousDay));
+    nextDayButton.addEventListener("click", () => loadEntries(nextDay));
+    openComposerButton.addEventListener("click", () => openComposer());
+    closeComposerButton.addEventListener("click", closeComposer);
+    cancelButton.addEventListener("click", closeComposer);
+    saveButton.addEventListener("click", saveEntry);
+    composerBackdrop.addEventListener("click", (event) => {
+        if (event.target === composerBackdrop) {
+            closeComposer();
+        }
+    });
+
+    loadEntries();
+</script>
+</body>
+</html>
