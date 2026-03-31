@@ -13,6 +13,7 @@ def test_entry_crud_flow(tmp_path: Path) -> None:
     sqlite_path = tmp_path / "test.db"
     os.environ["SQLITE_PATH"] = str(sqlite_path)
     os.environ["API_KEY"] = "test-key"
+    os.environ["APP_TIMEZONE"] = "UTC"
 
     for module_name in ["app.config", "app.database", "app.models", "app.main"]:
         sys.modules.pop(module_name, None)
@@ -46,6 +47,7 @@ def test_entry_crud_flow(tmp_path: Path) -> None:
         assert create_response.status_code == 201
         created = create_response.json()
         entry_id = created["id"]
+        assert created["created_at"].endswith("+00:00")
 
         list_response = client.get("/api/entries", headers=headers)
         assert list_response.status_code == 200

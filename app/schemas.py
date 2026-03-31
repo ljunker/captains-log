@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
+
+from app.timezone import assume_utc
 
 
 class EntryBase(BaseModel):
@@ -31,6 +33,10 @@ class EntryRead(EntryBase):
     id: int
     created_at: datetime
     updated_at: datetime
+
+    @field_serializer("created_at", "updated_at")
+    def serialize_datetime(self, value: datetime) -> str:
+        return assume_utc(value).isoformat()
 
 
 class EntryListResponse(BaseModel):

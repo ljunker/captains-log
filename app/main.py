@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -10,13 +10,14 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import Base, engine, get_db
 from app.models import Entry
 from app.schemas import EntryCreate, EntryListResponse, EntryRead, EntryUpdate
+from app.timezone import APP_TIMEZONE, local_date
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -109,6 +110,7 @@ def read_home(request: Request) -> HTMLResponse:
             "root_path": settings.root_path,
             "docs_path": f"{docs_path}{query_suffix}",
             "inline_css": INLINE_CSS,
+            "app_timezone": settings.timezone_name,
         },
     )
 
@@ -118,13 +120,9 @@ def healthcheck() -> dict[str, str]:
     return {"status": "ok"}
 
 
-def _get_available_days(db: Session) -> list[date]:
-    statement = (
-        select(func.date(Entry.created_at))
-        .group_by(func.date(Entry.created_at))
-        .order_by(func.date(Entry.created_at).desc())
-    )
-    return [date.fromisoformat(day_value) for day_value in db.scalars(statement) if day_value]
+def _get_all_entries(db: Session) -> list[Entry]:
+    statement = select(Entry).order_by(Entry.created_at.desc(), Entry.id.desc())
+    return list(db.scalars(statement))
 
 
 @app.get(
@@ -137,15 +135,10 @@ def list_entries(
     day: date | None = Query(default=None, description="Optionales Tagesfilter im Format YYYY-MM-DD"),
     db: Session = Depends(get_db),
 ) -> EntryListResponse:
-    available_days = _get_available_days(db)
-    selected_day = day if day is not None else (available_days[0] if available_days else date.today())
-
-    statement = (
-        select(Entry)
-        .where(func.date(Entry.created_at) == selected_day.isoformat())
-        .order_by(Entry.created_at.desc(), Entry.id.desc())
-    )
-    entries = list(db.scalars(statement))
+    all_entries = _get_all_entries(db)
+    available_days = sorted({local_date(entry.created_at) for entry in all_entries}, reverse=True)
+    selected_day = day if day is not None else (available_days[0] if available_days else datetime.now(APP_TIMEZONE).date())
+    entries = [entry for entry in all_entries if local_date(entry.created_at) == selected_day]
 
     previous_day = max((candidate for candidate in available_days if candidate < selected_day), default=None)
     next_day = min((candidate for candidate in available_days if candidate > selected_day), default=None)

@@ -15,6 +15,7 @@ class Settings:
     database_url = os.getenv("DATABASE_URL", f"sqlite:///{sqlite_path}")
     api_key = os.getenv("API_KEY")
     root_path = os.getenv("APP_ROOT_PATH", "").rstrip("/")
+    timezone_name = os.getenv("APP_TIMEZONE", "Europe/Berlin")
 
 
 settings = Settings()

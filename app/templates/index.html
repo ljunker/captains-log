@@ -88,6 +88,7 @@
     const composerMode = document.getElementById("composer-mode");
     const composerTitle = document.getElementById("composer-title");
     const rootPath = {{ root_path|tojson }};
+    const appTimezone = {{ app_timezone|tojson }};
 
     let currentDay = null;
     let previousDay = null;
@@ -135,6 +136,7 @@
     function formatTime(value) {
         return new Intl.DateTimeFormat("de-DE", {
             timeStyle: "short",
+            timeZone: appTimezone,
         }).format(new Date(value));
     }
 
@@ -144,7 +146,8 @@
             day: "2-digit",
             month: "long",
             year: "numeric",
-        }).format(new Date(`${value}T00:00:00`));
+            timeZone: appTimezone,
+        }).format(new Date(`${value}T12:00:00Z`));
     }
 
     function updateDayButtons() {
