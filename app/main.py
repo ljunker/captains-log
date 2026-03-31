@@ -99,6 +99,7 @@ def read_home(request: Request) -> HTMLResponse:
             "app_name": settings.app_name,
             "root_path": settings.root_path,
             "docs_path": f"{settings.root_path}/docs" if settings.root_path else "/docs",
+            "static_css_path": f"{settings.root_path}/static/style.css" if settings.root_path else "/static/style.css",
         },
     )
 
