@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
+from urllib.parse import urlencode
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status
 from fastapi.openapi.utils import get_openapi
@@ -67,6 +68,9 @@ app.openapi = custom_openapi
 
 @app.middleware("http")
 async def require_api_key(request: Request, call_next):
+    if request.url.path.startswith("/static/") or request.url.path == "/favicon.ico":
+        return await call_next(request)
+
     configured_api_key = settings.api_key
     if not configured_api_key:
         return await call_next(request)
@@ -92,14 +96,19 @@ async def require_api_key(request: Request, call_next):
 
 @app.get("/", response_class=HTMLResponse, tags=["UI"], summary="Web-Oberfläche")
 def read_home(request: Request) -> HTMLResponse:
+    valid_query_key = settings.api_key and request.query_params.get("api_key") == settings.api_key
+    query_suffix = f"?{urlencode({'api_key': settings.api_key})}" if valid_query_key else ""
+    docs_path = f"{settings.root_path}/docs" if settings.root_path else "/docs"
+    static_css_path = f"{settings.root_path}/static/style.css" if settings.root_path else "/static/style.css"
+
     return templates.TemplateResponse(
         request=request,
         name="index.html",
         context={
             "app_name": settings.app_name,
             "root_path": settings.root_path,
-            "docs_path": f"{settings.root_path}/docs" if settings.root_path else "/docs",
-            "static_css_path": f"{settings.root_path}/static/style.css" if settings.root_path else "/static/style.css",
+            "docs_path": f"{docs_path}{query_suffix}",
+            "static_css_path": f"{static_css_path}{query_suffix}",
         },
     )
 
