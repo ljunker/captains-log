@@ -121,7 +121,7 @@ def healthcheck() -> dict[str, str]:
 
 
 def _get_all_entries(db: Session) -> list[Entry]:
-    statement = select(Entry).order_by(Entry.created_at.desc(), Entry.id.desc())
+    statement = select(Entry).order_by(Entry.created_at.asc(), Entry.id.asc())
     return list(db.scalars(statement))
 
 
