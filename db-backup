@@ -1,0 +1,326 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import argparse
+import gzip
+import json
+import os
+import shutil
+import sqlite3
+import subprocess
+import sys
+import tempfile
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Iterable
+
+
+DEFAULT_BACKUP_DIR = Path(__file__).resolve().with_name("backups")
+DEFAULT_FILENAME_PREFIX = "captains-log-db"
+DEFAULT_RETENTION_DAYS = 30
+DEFAULT_DOCKER_VOLUME = "captains_log_data"
+DEFAULT_DOCKER_DB_PATH = "captains_log.db"
+OPENSSL_KEY_ENV = "BACKUP_PASSPHRASE"
+
+
+class BackupError(RuntimeError):
+    pass
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Create and verify encrypted SQLite backups for Captain's Log.",
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    common_parser = argparse.ArgumentParser(add_help=False)
+    common_parser.add_argument("--backup-dir", type=Path, help="Directory for encrypted backups.")
+    common_parser.add_argument("--sqlite-path", type=Path, help="Path to the SQLite database file.")
+    common_parser.add_argument("--docker-volume", help="Docker volume name that contains the SQLite database.")
+    common_parser.add_argument(
+        "--docker-db-path",
+        default=DEFAULT_DOCKER_DB_PATH,
+        help=f"Relative path to the SQLite file inside the Docker volume. Default: {DEFAULT_DOCKER_DB_PATH}",
+    )
+    common_parser.add_argument(
+        "--filename-prefix",
+        default=DEFAULT_FILENAME_PREFIX,
+        help=f"Prefix for created backup files. Default: {DEFAULT_FILENAME_PREFIX}",
+    )
+    common_parser.add_argument(
+        "--retention-days",
+        type=int,
+        help=f"Delete encrypted backups older than this many days. Default: {DEFAULT_RETENTION_DAYS}",
+    )
+
+    create_parser = subparsers.add_parser("create", parents=[common_parser], help="Create an encrypted backup.")
+    create_parser.add_argument("--dry-run", action="store_true", help="Print resolved paths without creating a backup.")
+
+    verify_parser = subparsers.add_parser("verify", parents=[common_parser], help="Verify an encrypted backup.")
+    verify_group = verify_parser.add_mutually_exclusive_group()
+    verify_group.add_argument("--backup-file", type=Path, help="Explicit encrypted backup file to verify.")
+    verify_group.add_argument("--latest", action="store_true", help="Verify the newest encrypted backup in the backup dir.")
+
+    return parser.parse_args(argv)
+
+
+def resolve_backup_dir(explicit_path: Path | None) -> Path:
+    raw = explicit_path or os.getenv("BACKUP_DIR")
+    return Path(raw).expanduser() if raw else DEFAULT_BACKUP_DIR
+
+
+def resolve_retention_days(explicit_days: int | None) -> int:
+    raw = explicit_days if explicit_days is not None else os.getenv("BACKUP_RETENTION_DAYS")
+    if raw in (None, ""):
+        return DEFAULT_RETENTION_DAYS
+
+    try:
+        days = int(raw)
+    except ValueError as exc:
+        raise BackupError("Retention days must be an integer.") from exc
+
+    if days < 0:
+        raise BackupError("Retention days must not be negative.")
+    return days
+
+
+def resolve_passphrase() -> str:
+    passphrase = os.getenv(OPENSSL_KEY_ENV, "").strip()
+    if not passphrase:
+        raise BackupError(f"{OPENSSL_KEY_ENV} must be set for encrypted backups.")
+    return passphrase
+
+
+def resolve_source_database(
+    explicit_sqlite_path: Path | None,
+    docker_volume: str | None,
+    docker_db_path: str,
+) -> Path:
+    if explicit_sqlite_path is not None:
+        return explicit_sqlite_path.expanduser().resolve()
+
+    sqlite_path_env = os.getenv("SQLITE_PATH", "").strip()
+    if sqlite_path_env:
+        return Path(sqlite_path_env).expanduser().resolve()
+
+    database_url = os.getenv("DATABASE_URL", "").strip()
+    if database_url.startswith("sqlite:///") and database_url != "sqlite:///:memory:":
+        sqlite_target = database_url.removeprefix("sqlite:///")
+        return Path(sqlite_target).expanduser().resolve()
+
+    volume_name = (docker_volume or os.getenv("BACKUP_DOCKER_VOLUME") or DEFAULT_DOCKER_VOLUME).strip()
+    if not volume_name:
+        raise BackupError("Could not determine SQLite path or Docker volume.")
+
+    mountpoint = inspect_docker_volume_mountpoint(volume_name)
+    return (mountpoint / docker_db_path).resolve()
+
+
+def inspect_docker_volume_mountpoint(volume_name: str) -> Path:
+    try:
+        result = subprocess.run(
+            ["docker", "volume", "inspect", volume_name],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError as exc:
+        raise BackupError("docker is not installed or not available in PATH.") from exc
+    except subprocess.CalledProcessError as exc:
+        stderr = exc.stderr.strip() or exc.stdout.strip()
+        raise BackupError(f"Could not inspect Docker volume '{volume_name}': {stderr}") from exc
+
+    try:
+        payload = json.loads(result.stdout)
+        mountpoint = payload[0]["Mountpoint"]
+    except (IndexError, KeyError, json.JSONDecodeError) as exc:
+        raise BackupError(f"Docker volume inspect output for '{volume_name}' was invalid.") from exc
+
+    return Path(mountpoint)
+
+
+def ensure_source_database_exists(path: Path) -> None:
+    if not path.exists():
+        raise BackupError(f"SQLite database not found: {path}")
+
+
+def openssl_command(input_path: Path, output_path: Path, decrypt: bool = False) -> list[str]:
+    command = [
+        "openssl",
+        "enc",
+        "-aes-256-cbc",
+        "-pbkdf2",
+        "-salt",
+        "-in",
+        str(input_path),
+        "-out",
+        str(output_path),
+        "-pass",
+        f"env:{OPENSSL_KEY_ENV}",
+    ]
+    if decrypt:
+        command.insert(3, "-d")
+    return command
+
+
+def run_openssl(command: list[str], passphrase: str) -> None:
+    environment = os.environ.copy()
+    environment[OPENSSL_KEY_ENV] = passphrase
+
+    try:
+        subprocess.run(command, check=True, env=environment, capture_output=True, text=True)
+    except FileNotFoundError as exc:
+        raise BackupError("openssl is not installed or not available in PATH.") from exc
+    except subprocess.CalledProcessError as exc:
+        stderr = exc.stderr.strip() or exc.stdout.strip()
+        raise BackupError(f"OpenSSL command failed: {stderr}") from exc
+
+
+def backup_filename(prefix: str, timestamp: datetime | None = None) -> str:
+    current = timestamp or datetime.now(UTC)
+    return f"{prefix}-{current.strftime('%Y%m%d-%H%M%S')}.sqlite3.gz.enc"
+
+
+def copy_sqlite_database(source: Path, destination: Path) -> None:
+    source_connection = sqlite3.connect(source)
+    try:
+        destination_connection = sqlite3.connect(destination)
+        try:
+            source_connection.backup(destination_connection)
+        finally:
+            destination_connection.close()
+    finally:
+        source_connection.close()
+
+
+def gzip_file(source: Path, destination: Path) -> None:
+    with source.open("rb") as source_file, gzip.open(destination, "wb") as gzip_file_handle:
+        shutil.copyfileobj(source_file, gzip_file_handle)
+
+
+def create_backup(
+    source_database: Path,
+    backup_dir: Path,
+    prefix: str,
+    retention_days: int,
+    passphrase: str,
+    dry_run: bool = False,
+) -> Path:
+    ensure_source_database_exists(source_database)
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    encrypted_backup_path = backup_dir / backup_filename(prefix)
+
+    if dry_run:
+        return encrypted_backup_path
+
+    with tempfile.TemporaryDirectory(prefix="captains-log-backup-") as temp_dir_name:
+        temp_dir = Path(temp_dir_name)
+        raw_backup = temp_dir / "database.sqlite3"
+        gzip_backup = temp_dir / "database.sqlite3.gz"
+
+        copy_sqlite_database(source_database, raw_backup)
+        gzip_file(raw_backup, gzip_backup)
+        run_openssl(openssl_command(gzip_backup, encrypted_backup_path), passphrase)
+
+    prune_old_backups(backup_dir, retention_days)
+    return encrypted_backup_path
+
+
+def iter_encrypted_backups(backup_dir: Path) -> Iterable[Path]:
+    if not backup_dir.exists():
+        return []
+    return sorted(backup_dir.glob("*.sqlite3.gz.enc"))
+
+
+def latest_backup_file(backup_dir: Path) -> Path:
+    backups = list(iter_encrypted_backups(backup_dir))
+    if not backups:
+        raise BackupError(f"No encrypted backups found in {backup_dir}")
+    return backups[-1]
+
+
+def prune_old_backups(backup_dir: Path, retention_days: int, now: datetime | None = None) -> list[Path]:
+    if retention_days <= 0:
+        return []
+
+    cutoff = (now or datetime.now(UTC)) - timedelta(days=retention_days)
+    deleted: list[Path] = []
+
+    for backup in iter_encrypted_backups(backup_dir):
+        modified_at = datetime.fromtimestamp(backup.stat().st_mtime, tz=UTC)
+        if modified_at < cutoff:
+            backup.unlink()
+            deleted.append(backup)
+
+    return deleted
+
+
+def verify_backup(backup_file: Path, passphrase: str) -> tuple[str, int]:
+    if not backup_file.exists():
+        raise BackupError(f"Backup file not found: {backup_file}")
+
+    with tempfile.TemporaryDirectory(prefix="captains-log-verify-") as temp_dir_name:
+        temp_dir = Path(temp_dir_name)
+        gzip_backup = temp_dir / "database.sqlite3.gz"
+        raw_backup = temp_dir / "database.sqlite3"
+
+        run_openssl(openssl_command(backup_file, gzip_backup, decrypt=True), passphrase)
+
+        with gzip.open(gzip_backup, "rb") as gzip_file_handle, raw_backup.open("wb") as sqlite_file_handle:
+            shutil.copyfileobj(gzip_file_handle, sqlite_file_handle)
+
+        connection = sqlite3.connect(raw_backup)
+        try:
+            integrity_result = connection.execute("PRAGMA integrity_check").fetchone()
+            if integrity_result is None or integrity_result[0] != "ok":
+                raise BackupError(f"SQLite integrity check failed for {backup_file}")
+
+            schema_version = connection.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()
+            version = int(schema_version[0]) if schema_version is not None else -1
+        finally:
+            connection.close()
+
+    return ("ok", version)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    backup_dir = resolve_backup_dir(args.backup_dir)
+    retention_days = resolve_retention_days(getattr(args, "retention_days", None))
+    passphrase = resolve_passphrase()
+
+    if args.command == "create":
+        source_database = resolve_source_database(args.sqlite_path, args.docker_volume, args.docker_db_path)
+        backup_path = create_backup(
+            source_database=source_database,
+            backup_dir=backup_dir,
+            prefix=args.filename_prefix,
+            retention_days=retention_days,
+            passphrase=passphrase,
+            dry_run=args.dry_run,
+        )
+        print(f"Source database: {source_database}")
+        print(f"Encrypted backup: {backup_path}")
+        print(f"Retention days: {retention_days}")
+        if args.dry_run:
+            print("Dry run: no backup created.")
+        return 0
+
+    if args.command == "verify":
+        target_backup = args.backup_file or latest_backup_file(backup_dir)
+        status, version = verify_backup(target_backup, passphrase)
+        print(f"Backup file: {target_backup}")
+        print(f"Integrity check: {status}")
+        print(f"Schema version: {version}")
+        return 0
+
+    raise BackupError(f"Unknown command: {args.command}")
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except BackupError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc

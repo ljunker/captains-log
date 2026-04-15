@@ -87,6 +87,37 @@ Beim App-Start wird die SQLite-Datenbank versioniert.
 - `000_initial.sql` beschreibt den initialen Tabellenstand.
 - Bestehende Datenbanken ohne `schema_version` werden beim ersten Start übernommen und auf Version `0` gesetzt.
 
+## Datenbank-Backups
+
+Für verschlüsselte SQLite-Backups gibt es das Script [`./db-backup`](/Users/lj/PycharmProjects/captains_log/db-backup).
+
+Voraussetzungen:
+
+- `openssl` muss auf dem Host installiert sein.
+- `BACKUP_PASSPHRASE` muss gesetzt sein.
+- Das Backup-Ziel sollte auf einen sicheren Speicher zeigen, z. B. ein extern gemountetes Laufwerk oder einen verschlüsselten Sync-Ordner.
+
+Beispiele:
+
+```bash
+chmod +x ./db-backup
+BACKUP_PASSPHRASE='dein-lang-geheimer-wert' ./db-backup create
+BACKUP_PASSPHRASE='dein-lang-geheimer-wert' ./db-backup verify --latest
+BACKUP_PASSPHRASE='dein-lang-geheimer-wert' ./db-backup create --backup-dir /mnt/secure-backups/captains-log
+```
+
+Was das Script macht:
+
+- erstellt einen konsistenten SQLite-Backup-Snapshot per Python-Backup-API
+- komprimiert ihn mit gzip
+- verschlüsselt ihn mit `openssl` per AES-256-CBC und PBKDF2
+- löscht Backups automatisch nach standardmäßig 30 Tagen
+- prüft Backups per Entschlüsselung, temporärem Restore und `PRAGMA integrity_check`
+
+Für Docker-Deployments liest das Script standardmäßig die Datenbank aus dem Docker-Volume `captains_log_data`. Für lokale Setups kannst du `SQLITE_PATH` oder `DATABASE_URL` verwenden.
+
+Eine Debian-13-Cron-Vorlage liegt in [ops/cron/captains-log-backup.cron.example](/Users/lj/PycharmProjects/captains_log/ops/cron/captains-log-backup.cron.example:1).
+
 ## Docker Compose
 
 ```bash

@@ -12,7 +12,7 @@
 - migrationsdateien sollten in einem ordner liegen und nach version nummer benannt sein, z.B. 000_initial.sql, 001_add_users.sql, etc.
 - migrationsdateien sollten auch eine beschreibung enthalten, z.B. 000_initial.sql könnte die initiale datenbankstruktur erstellen, 001_add_users.sql könnte eine tabelle für benutzer erstellen, etc.
 
-### datenbank backup
+### datenbank backup ERLEDIGT
 - regelmäßige backups der datenbank erstellen, z.B. täglich oder wöchentlich
 - backups sollten in einem sicheren ort gespeichert werden, z.B. in der cloud oder auf einem externen speicher
 - backups sollten verschlüsselt werden, um die sicherheit zu erhöhen

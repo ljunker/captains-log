@@ -1,0 +1,15 @@
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Debian 13 example for /etc/cron.d/captains-log-backup
+# Adjust the paths and passphrase source before enabling.
+
+BACKUP_PASSPHRASE_FILE=/etc/captains-log/backup-passphrase
+REPO_DIR=/opt/captains_log
+BACKUP_DIR=/mnt/secure-backups/captains-log
+
+# Daily encrypted backup at 02:15
+15 2 * * * root cd ${REPO_DIR} && BACKUP_PASSPHRASE="$(cat ${BACKUP_PASSPHRASE_FILE})" ./db-backup create --backup-dir "${BACKUP_DIR}" >> /var/log/captains-log-backup.log 2>&1
+
+# Weekly restore-and-integrity-check every Sunday at 03:00
+0 3 * * 0 root cd ${REPO_DIR} && BACKUP_PASSPHRASE="$(cat ${BACKUP_PASSPHRASE_FILE})" ./db-backup verify --latest --backup-dir "${BACKUP_DIR}" >> /var/log/captains-log-backup.log 2>&1
