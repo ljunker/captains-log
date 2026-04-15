@@ -1,7 +1,7 @@
 services:
   app:
-    build:
-      context: .
+    image: ${DOCKER_IMAGE_REPOSITORY:-kryptikker/captains-log}:${DOCKER_IMAGE_VERSION:-latest}
+    pull_policy: always
     container_name: captains-log-app
     environment:
       DATABASE_URL: sqlite:////data/captains_log.db

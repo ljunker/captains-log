@@ -22,7 +22,7 @@
 
 ## deployment
 
-### version von docker hub ziehen
+### version von docker hub ziehen ERLEDIGT
 - beim start des containers die version von docker hub ziehen, um sicherzustellen, dass immer die neueste version verwendet wird
 - die version könnte in einer umgebungsvariable angegeben werden, z.B. DOCKER_IMAGE_VERSION, oder in einer datei, z.B. version.txt
 - wenn die version nicht angegeben ist, könnte eine standardversion verwendet werden, z.B. latest

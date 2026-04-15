@@ -83,13 +83,31 @@ Beim App-Start wird die SQLite-Datenbank versioniert.
 ## Docker Compose
 
 ```bash
-docker compose up --build -d
+chmod +x ./dockerhub-up
+./dockerhub-up
+```
+
+Das Deployment zieht das veröffentlichte Docker-Hub-Image `kryptikker/captains-log` und startet es per `docker compose`. Die Version wird in dieser Reihenfolge bestimmt:
+
+- Argument `--version`
+- Umgebungsvariable `DOCKER_IMAGE_VERSION`
+- [`version.txt`](/Users/lj/PycharmProjects/captains_log/version.txt)
+- Fallback `latest`
+
+Zusätzlich prüft das Script die neuesten Docker-Hub-Tags und warnt, wenn eine gepinnte Version hinter der neuesten verfügbaren Version liegt.
+
+Nützliche Varianten:
+
+```bash
+./dockerhub-up --check-only
+./dockerhub-up --version 1.2.0
+./dockerhub-up --sync-version-file
 ```
 
 Standardmäßig bindet der Container nur lokal auf dem Host unter [http://127.0.0.1:8000](http://127.0.0.1:8000). Einen anderen lokalen Port kannst du so setzen:
 
 ```bash
-API_KEY=dein-schluessel HOST_PORT=8010 docker compose up --build -d
+API_KEY=dein-schluessel HOST_PORT=8010 ./dockerhub-up
 ```
 
 Die SQLite-Datei liegt im benannten Volume `captains_log_data`.

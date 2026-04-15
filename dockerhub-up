@@ -1,0 +1,216 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.request import urlopen
+
+
+DEFAULT_REPOSITORY = "kryptikker/captains-log"
+DEFAULT_VERSION = "latest"
+DEFAULT_VERSION_FILE = Path(__file__).resolve().with_name("version.txt")
+SEMVER_TAG_RE = re.compile(r"^v?(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)$")
+
+
+class DockerHubError(RuntimeError):
+    pass
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Pull and start the configured Docker Hub image version with docker compose.",
+    )
+    parser.add_argument(
+        "--repository",
+        help=f"Docker Hub repository in the form <namespace>/<repository>. Default: {DEFAULT_REPOSITORY}",
+    )
+    parser.add_argument(
+        "--version",
+        help="Requested Docker image tag. Overrides DOCKER_IMAGE_VERSION and version.txt.",
+    )
+    parser.add_argument(
+        "--version-file",
+        type=Path,
+        default=DEFAULT_VERSION_FILE,
+        help=f"File containing the Docker image tag. Default: {DEFAULT_VERSION_FILE.name}",
+    )
+    parser.add_argument(
+        "--sync-version-file",
+        action="store_true",
+        help="Write the newest semantic Docker Hub tag into the version file before deployment.",
+    )
+    parser.add_argument(
+        "--check-only",
+        action="store_true",
+        help="Only resolve and print the configured and latest versions without running docker compose.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print docker commands without executing them.",
+    )
+    return parser.parse_args(argv)
+
+
+def resolve_repository(explicit_repository: str | None) -> str:
+    repository = (explicit_repository or os.getenv("DOCKER_IMAGE_REPOSITORY") or DEFAULT_REPOSITORY).strip()
+    namespace, name = split_repository(repository)
+    return f"{namespace}/{name}"
+
+
+def split_repository(repository: str) -> tuple[str, str]:
+    namespace, separator, name = repository.partition("/")
+    if not separator or not namespace or not name:
+        raise DockerHubError("Repository must have the form <namespace>/<repository>.")
+    return namespace, name
+
+
+def read_version_file(path: Path) -> str | None:
+    if not path.exists():
+        return None
+
+    content = path.read_text(encoding="utf-8").strip()
+    return content or None
+
+
+def write_version_file(path: Path, version: str) -> None:
+    path.write_text(f"{version}\n", encoding="utf-8")
+
+
+def resolve_requested_version(explicit_version: str | None, version_file: Path) -> tuple[str, str]:
+    if explicit_version:
+        return explicit_version.strip(), "argument"
+
+    environment_version = os.getenv("DOCKER_IMAGE_VERSION", "").strip()
+    if environment_version:
+        return environment_version, "environment"
+
+    file_version = read_version_file(version_file)
+    if file_version:
+        return file_version, f"file:{version_file.name}"
+
+    return DEFAULT_VERSION, "default"
+
+
+def parse_semver_tag(tag: str) -> tuple[int, int, int] | None:
+    match = SEMVER_TAG_RE.match(tag)
+    if match is None:
+        return None
+
+    return (
+        int(match.group("major")),
+        int(match.group("minor")),
+        int(match.group("patch")),
+    )
+
+
+def tags_url(repository: str) -> str:
+    namespace, name = split_repository(repository)
+    return f"https://hub.docker.com/v2/namespaces/{namespace}/repositories/{name}/tags?page_size=100"
+
+
+def latest_tag_url(repository: str) -> str:
+    namespace, name = split_repository(repository)
+    return f"https://hub.docker.com/v2/namespaces/{namespace}/repositories/{name}/tags/latest"
+
+
+def fetch_json(url: str, timeout: float = 5.0) -> dict:
+    try:
+        with urlopen(url, timeout=timeout) as response:
+            return json.load(response)
+    except HTTPError as exc:
+        raise DockerHubError(f"Docker Hub request failed with HTTP {exc.code} for {url}") from exc
+    except URLError as exc:
+        raise DockerHubError(f"Docker Hub request failed for {url}: {exc.reason}") from exc
+
+
+def fetch_latest_dockerhub_version(repository: str, timeout: float = 5.0) -> str:
+    tags_payload = fetch_json(tags_url(repository), timeout=timeout)
+    candidates: list[tuple[tuple[int, int, int], str]] = []
+
+    for result in tags_payload.get("results", []):
+        tag_name = str(result.get("name", "")).strip()
+        semver = parse_semver_tag(tag_name)
+        if semver is not None:
+            candidates.append((semver, tag_name))
+
+    if candidates:
+        candidates.sort(key=lambda item: item[0], reverse=True)
+        return candidates[0][1]
+
+    latest_payload = fetch_json(latest_tag_url(repository), timeout=timeout)
+    tag_name = str(latest_payload.get("name", "")).strip()
+    if not tag_name:
+        raise DockerHubError("Docker Hub response did not contain a tag name.")
+    return tag_name
+
+
+def build_compose_env(repository: str, version: str) -> dict[str, str]:
+    environment = os.environ.copy()
+    environment["DOCKER_IMAGE_REPOSITORY"] = repository
+    environment["DOCKER_IMAGE_VERSION"] = version
+    return environment
+
+
+def run_command(command: list[str], environment: dict[str, str], dry_run: bool) -> None:
+    print("$", " ".join(command))
+    if dry_run:
+        return
+
+    subprocess.run(command, check=True, env=environment)
+
+
+def deploy(repository: str, version: str, dry_run: bool) -> None:
+    environment = build_compose_env(repository, version)
+    run_command(["docker", "compose", "pull", "app"], environment, dry_run=dry_run)
+    run_command(["docker", "compose", "up", "-d", "app"], environment, dry_run=dry_run)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    repository = resolve_repository(args.repository)
+
+    latest_version: str | None = None
+    latest_error: str | None = None
+    try:
+        latest_version = fetch_latest_dockerhub_version(repository)
+    except DockerHubError as exc:
+        latest_error = str(exc)
+
+    if args.sync_version_file:
+        if latest_version is None:
+            print(f"Warning: could not sync {args.version_file.name}: {latest_error}", file=sys.stderr)
+        else:
+            write_version_file(args.version_file, latest_version)
+
+    configured_version, version_source = resolve_requested_version(args.version, args.version_file)
+
+    print(f"Repository: {repository}")
+    print(f"Configured version: {configured_version} ({version_source})")
+
+    if latest_version is not None:
+        print(f"Latest Docker Hub version: {latest_version}")
+        if configured_version != DEFAULT_VERSION and configured_version != latest_version:
+            print(
+                f"Warning: configured version {configured_version} differs from latest Docker Hub version {latest_version}.",
+                file=sys.stderr,
+            )
+    elif latest_error is not None:
+        print(f"Warning: {latest_error}", file=sys.stderr)
+
+    if args.check_only:
+        return 0
+
+    deploy(repository, configured_version, dry_run=args.dry_run)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
