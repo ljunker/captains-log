@@ -17,6 +17,7 @@
 - backups sollten verschlüsselt werden, um die sicherheit zu erhöhen
 - backups sollten automatisch gelöscht werden, wenn sie älter als eine bestimmte zeit sind, z.B. 30 tage, um speicherplatz zu sparen
 - backups sollten regelmäßig getestet werden, um sicherzustellen, dass sie im notfall wiederhergestellt werden können
+- alles über cron jobs automatisieren, damit es keine manuelle arbeit erfordert und regelmäßig durchgeführt wird. die cron jobs müssen auf debian 13 laufen
 
 ## deployment
 
