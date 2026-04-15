@@ -17,4 +17,4 @@ services:
 
 volumes:
   captains_log_data:
-    name: captains-log_captains_log_data
+    name: captains_log_data
