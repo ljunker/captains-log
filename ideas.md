@@ -17,3 +17,13 @@
 - backups sollten verschlüsselt werden, um die sicherheit zu erhöhen
 - backups sollten automatisch gelöscht werden, wenn sie älter als eine bestimmte zeit sind, z.B. 30 tage, um speicherplatz zu sparen
 - backups sollten regelmäßig getestet werden, um sicherzustellen, dass sie im notfall wiederhergestellt werden können
+
+## deployment
+
+### version von docker hub ziehen
+- beim start des containers die version von docker hub ziehen, um sicherzustellen, dass immer die neueste version verwendet wird
+- die version könnte in einer umgebungsvariable angegeben werden, z.B. DOCKER_IMAGE_VERSION, oder in einer datei, z.B. version.txt
+- wenn die version nicht angegeben ist, könnte eine standardversion verwendet werden, z.B. latest
+- die version könnte auch automatisch aktualisiert werden, z.B. durch einen cronjob, der regelmäßig die neueste version von docker hub überprüft und die umgebungsvariable oder die datei aktualisiert, wenn eine neue version verfügbar ist
+- beim start des containers könnte auch überprüft werden, ob die aktuelle version mit der neuesten version übereinstimmt, und eine warnung ausgegeben werden, wenn dies nicht der fall ist, um die benutzer zu ermutigen, auf die neueste version zu aktualisieren.
+
