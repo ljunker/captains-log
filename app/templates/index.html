@@ -40,6 +40,13 @@
             <span class="shortcut-pill"><kbd>Enter</kbd> Speichern</span>
             <span class="shortcut-pill"><kbd>Shift</kbd> + <kbd>Enter</kbd> Zeilenumbruch</span>
         </section>
+        <section id="tag-filter-strip" class="tag-filter-strip hidden">
+            <div class="tag-filter-head">
+                <p class="eyebrow">Tags</p>
+                <button type="button" id="clear-tag-filter-button" class="secondary hidden">Filter loeschen</button>
+            </div>
+            <div id="tag-filter-list" class="tag-filter-list"></div>
+        </section>
         <div id="entries-list" class="entries-list"></div>
     </section>
 </main>
@@ -56,6 +63,10 @@
 
         <input type="hidden" id="entry-id">
         <textarea id="content" name="content" rows="8" placeholder="Was soll heute festgehalten werden?" required></textarea>
+        <label class="field-group" for="tags">
+            <span class="field-label">Tags</span>
+            <input id="tags" name="tags" type="text" placeholder="z.B. arbeit, privat, python">
+        </label>
 
         <div class="composer-foot">
             <p id="form-status" class="status" aria-live="polite"></p>
@@ -76,6 +87,7 @@
             </div>
             <span class="entry-id"></span>
         </div>
+        <div class="entry-tags hidden"></div>
         <p class="entry-content"></p>
         <div class="card-actions">
             <button type="button" data-action="edit">Bearbeiten</button>
@@ -87,6 +99,7 @@
 <script>
     const entryIdInput = document.getElementById("entry-id");
     const contentInput = document.getElementById("content");
+    const tagsInput = document.getElementById("tags");
     const formStatus = document.getElementById("form-status");
     const entriesList = document.getElementById("entries-list");
     const template = document.getElementById("entry-template");
@@ -102,12 +115,16 @@
     const composerBackdrop = document.getElementById("composer-backdrop");
     const composerMode = document.getElementById("composer-mode");
     const composerTitle = document.getElementById("composer-title");
+    const tagFilterStrip = document.getElementById("tag-filter-strip");
+    const tagFilterList = document.getElementById("tag-filter-list");
+    const clearTagFilterButton = document.getElementById("clear-tag-filter-button");
     const rootPath = {{ root_path|tojson }};
     const appTimezone = {{ app_timezone|tojson }};
 
     let currentDay = null;
     let previousDay = null;
     let nextDay = null;
+    let activeTag = null;
 
     function appUrl(path) {
         const normalizedPath = path.startsWith("/") ? path : `/${path}`;
@@ -122,6 +139,7 @@
     function resetComposer() {
         entryIdInput.value = "";
         contentInput.value = "";
+        tagsInput.value = "";
         composerMode.textContent = "Neuer Eintrag";
         composerTitle.textContent = "Kurz festhalten, bevor es wieder weg ist.";
         setStatus("");
@@ -131,6 +149,7 @@
         if (entry) {
             entryIdInput.value = entry.id;
             contentInput.value = entry.content;
+            tagsInput.value = entry.tags.join(", ");
             composerMode.textContent = "Eintrag bearbeiten";
             composerTitle.textContent = `Eintrag #${entry.id} anpassen.`;
         } else {
@@ -177,8 +196,43 @@
         dayLabel.textContent = currentDay ? formatDay(currentDay) : "Dein Logbuch";
     }
 
-    async function fetchEntries(day = null) {
-        const query = day ? `?day=${encodeURIComponent(day)}` : "";
+    function parseTagsInput(value) {
+        return value
+            .split(",")
+            .map((tag) => tag.trim())
+            .filter(Boolean);
+    }
+
+    function renderTagFilters(availableTags) {
+        const tagsToRender = activeTag && !availableTags.includes(activeTag) ? [activeTag, ...availableTags] : availableTags;
+        tagFilterList.innerHTML = "";
+        const hasTags = tagsToRender.length > 0;
+        tagFilterStrip.classList.toggle("hidden", !hasTags);
+        clearTagFilterButton.classList.toggle("hidden", !activeTag);
+
+        for (const tag of tagsToRender) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "tag-chip tag-chip-button";
+            button.textContent = `#${tag}`;
+            if (tag === activeTag) {
+                button.classList.add("active");
+            }
+            button.addEventListener("click", () => loadEntries(currentDay, tag === activeTag ? null : tag));
+            tagFilterList.appendChild(button);
+        }
+    }
+
+    async function fetchEntries(day = null, tag = activeTag) {
+        const params = new URLSearchParams();
+        if (day) {
+            params.set("day", day);
+        }
+        if (tag) {
+            params.set("tag", tag);
+        }
+        const queryString = params.toString();
+        const query = queryString ? `?${queryString}` : "";
         const response = await fetch(appUrl(`/api/entries${query}`));
         if (!response.ok) {
             throw new Error("Einträge konnten nicht geladen werden.");
@@ -190,20 +244,34 @@
         currentDay = payload.day;
         previousDay = payload.previous_day;
         nextDay = payload.next_day;
+        activeTag = payload.active_tag;
         updateDayButtons();
+        renderTagFilters(payload.available_tags);
 
         const entries = payload.entries;
         entryCount.textContent = `${entries.length} ${entries.length === 1 ? "Eintrag" : "Einträge"}`;
         entriesList.innerHTML = "";
 
         if (entries.length === 0) {
-            entriesList.innerHTML = `
-                <article class="empty-card">
-                    <p class="eyebrow">Leer</p>
-                    <h3>Für diesen Tag gibt es noch keinen Eintrag.</h3>
-                    <p>Drück einfach <strong>C</strong> und schreib direkt los.</p>
-                </article>
-            `;
+            const card = document.createElement("article");
+            card.className = "empty-card";
+
+            const eyebrow = document.createElement("p");
+            eyebrow.className = "eyebrow";
+            eyebrow.textContent = "Leer";
+
+            const heading = document.createElement("h3");
+            heading.textContent = "Für diesen Tag gibt es noch keinen Eintrag.";
+
+            const message = document.createElement("p");
+            message.textContent = activeTag
+                ? `Mit dem Tag #${activeTag} gibt es hier nichts.`
+                : "Drück einfach C und schreib direkt los.";
+
+            card.appendChild(eyebrow);
+            card.appendChild(heading);
+            card.appendChild(message);
+            entriesList.appendChild(card);
             return;
         }
 
@@ -213,6 +281,17 @@
             fragment.querySelector(".entry-date").textContent = formatTime(entry.created_at);
             fragment.querySelector(".entry-id").textContent = `#${entry.id}`;
             fragment.querySelector(".entry-content").textContent = entry.content;
+
+            const tagContainer = fragment.querySelector(".entry-tags");
+            if (entry.tags.length > 0) {
+                tagContainer.classList.remove("hidden");
+                for (const tag of entry.tags) {
+                    const tagElement = document.createElement("span");
+                    tagElement.className = "tag-chip";
+                    tagElement.textContent = `#${tag}`;
+                    tagContainer.appendChild(tagElement);
+                }
+            }
 
             const updateElement = fragment.querySelector(".entry-update");
             if (hasMeaningfulUpdate(entry.created_at, entry.updated_at)) {
@@ -238,17 +317,17 @@
                 }
 
                 setStatus(`Eintrag #${entry.id} gelöscht.`);
-                await loadEntries(currentDay);
+                await loadEntries(currentDay, activeTag);
             });
 
             entriesList.appendChild(fragment);
         }
     }
 
-    async function loadEntries(day = currentDay) {
+    async function loadEntries(day = currentDay, tag = activeTag) {
         const selectedDay = typeof day === "string" ? day : currentDay;
         try {
-            const payload = await fetchEntries(selectedDay);
+            const payload = await fetchEntries(selectedDay, tag);
             renderEntries(payload);
         } catch (error) {
             entriesList.innerHTML = '<article class="empty-card error"><h3>Einträge konnten nicht geladen werden.</h3></article>';
@@ -269,7 +348,7 @@
         const response = await fetch(url, {
             method,
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({content}),
+            body: JSON.stringify({content, tags: parseTagsInput(tagsInput.value)}),
         });
 
         if (!response.ok) {
@@ -282,7 +361,7 @@
         const targetDay = entryId ? currentDay : null;
         closeComposer();
         setStatus(`Eintrag #${savedEntry.id} gespeichert.`);
-        await loadEntries(targetDay);
+        await loadEntries(targetDay, activeTag);
     }
 
     function isTypingContext() {
@@ -316,13 +395,14 @@
         }
     });
 
-    refreshButton.addEventListener("click", () => loadEntries());
-    previousDayButton.addEventListener("click", () => loadEntries(previousDay));
-    nextDayButton.addEventListener("click", () => loadEntries(nextDay));
+    refreshButton.addEventListener("click", () => loadEntries(currentDay, activeTag));
+    previousDayButton.addEventListener("click", () => loadEntries(previousDay, activeTag));
+    nextDayButton.addEventListener("click", () => loadEntries(nextDay, activeTag));
     openComposerButton.addEventListener("click", () => openComposer());
     closeComposerButton.addEventListener("click", closeComposer);
     cancelButton.addEventListener("click", closeComposer);
     saveButton.addEventListener("click", saveEntry);
+    clearTagFilterButton.addEventListener("click", () => loadEntries(currentDay, null));
     composerBackdrop.addEventListener("click", (event) => {
         if (event.target === composerBackdrop) {
             closeComposer();

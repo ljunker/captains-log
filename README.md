@@ -68,7 +68,14 @@ Beispiel für einen neuen Eintrag:
 curl -X POST http://127.0.0.1:8000/api/entries \
   -H "X-API-Key: dein-schluessel" \
   -H "Content-Type: application/json" \
-  -d '{"content":"Erster Testeintrag"}'
+  -d '{"content":"Erster Testeintrag","tags":["arbeit","python"]}'
+```
+
+Tags sind optional und werden normalisiert gespeichert. Einträge eines Tages kannst du zusätzlich nach einem Tag filtern:
+
+```bash
+curl -H "X-API-Key: dein-schluessel" \
+  "http://127.0.0.1:8000/api/entries?tag=python"
 ```
 
 ## Datenbank-Migrationen

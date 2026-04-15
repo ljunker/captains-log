@@ -35,6 +35,7 @@ body {
 
 button,
 textarea,
+input,
 a {
     font: inherit;
 }
@@ -222,6 +223,29 @@ kbd {
     gap: 8px;
 }
 
+.tag-filter-strip {
+    padding: 0 0 12px;
+}
+
+.tag-filter-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.tag-filter-head .eyebrow {
+    margin-bottom: 0;
+}
+
+.tag-filter-list,
+.entry-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
 .entry-card,
 .empty-card {
     border-radius: 2px;
@@ -266,6 +290,36 @@ kbd {
     line-height: 1.45;
     white-space: pre-wrap;
     font-size: 0.98rem;
+}
+
+.entry-tags {
+    margin: 0 0 10px;
+}
+
+.tag-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 26px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    border: 1px solid rgba(143, 31, 31, 0.14);
+    color: var(--accent-dark);
+    font-family: var(--sans);
+    font-size: 0.82rem;
+    line-height: 1;
+}
+
+.tag-chip-button {
+    background: transparent;
+    color: var(--ink);
+    border-color: var(--line);
+}
+
+.tag-chip-button.active {
+    background: var(--ink);
+    color: #ffffff;
+    border-color: var(--ink);
 }
 
 .empty-card h3 {
@@ -333,6 +387,31 @@ textarea {
     font-size: 1rem;
 }
 
+input {
+    width: 100%;
+    min-height: 42px;
+    padding: 10px 12px;
+    border-radius: 2px;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.9);
+    color: var(--ink);
+    font-size: 0.95rem;
+}
+
+.field-group {
+    display: grid;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.field-label {
+    color: var(--muted);
+    font-family: var(--sans);
+    font-size: 0.84rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
 .composer-foot {
     align-items: center;
     margin-top: 12px;
@@ -356,7 +435,8 @@ textarea {
 
 @media (max-width: 900px) {
     .entries-head,
-    .composer-foot {
+    .composer-foot,
+    .tag-filter-head {
         flex-direction: column;
         align-items: stretch;
     }
@@ -414,5 +494,15 @@ textarea {
     .toolbar-refresh-button {
         padding: 5px;
         min-width: 32px;
+    }
+
+    .tag-filter-list {
+        gap: 4px;
+    }
+
+    .tag-chip {
+        min-height: 24px;
+        padding: 4px 7px;
+        font-size: 0.78rem;
     }
 }

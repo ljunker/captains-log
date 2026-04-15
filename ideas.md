@@ -36,7 +36,7 @@
 
 ## usability
 
-### tags
+### tags ERLEDIGT
 - einträge sollen eine optionale liste an tags haben, um sie besser kategorisieren und filtern zu können
 - tags könnten in einer eigenen tabelle gespeichert werden, um redundanz zu vermeiden und die wartbarkeit zu erhöhen
 - tags könnten auch hierarchisch organisiert werden, z.B. könnte es einen tag "programmieren" geben, der untertags wie "python", "javascript", etc. hat

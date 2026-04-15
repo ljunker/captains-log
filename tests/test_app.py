@@ -42,13 +42,14 @@ def test_entry_crud_flow(tmp_path: Path) -> None:
 
         create_response = client.post(
             "/api/entries",
-            json={"content": "Erster Eintrag"},
+            json={"content": "Erster Eintrag", "tags": ["Arbeit", "Python", "arbeit"]},
             headers=headers,
         )
         assert create_response.status_code == 201
         created = create_response.json()
         entry_id = created["id"]
         assert created["created_at"].endswith("+00:00")
+        assert created["tags"] == ["arbeit", "python"]
 
         list_response = client.get("/api/entries", headers=headers)
         assert list_response.status_code == 200
@@ -56,21 +57,37 @@ def test_entry_crud_flow(tmp_path: Path) -> None:
         assert listed["day"] == today.date().isoformat()
         assert listed["previous_day"] == yesterday.date().isoformat()
         assert listed["next_day"] is None
+        assert listed["active_tag"] is None
+        assert listed["available_tags"] == ["arbeit", "python"]
         assert len(listed["entries"]) == 1
+
+        filtered_response = client.get("/api/entries?tag=python", headers=headers)
+        assert filtered_response.status_code == 200
+        filtered_payload = filtered_response.json()
+        assert filtered_payload["active_tag"] == "python"
+        assert filtered_payload["available_tags"] == ["arbeit", "python"]
+        assert len(filtered_payload["entries"]) == 1
+        assert filtered_payload["entries"][0]["tags"] == ["arbeit", "python"]
 
         update_response = client.put(
             f"/api/entries/{entry_id}",
-            json={"content": "Aktualisiert"},
+            json={"content": "Aktualisiert", "tags": ["Privat"]},
             headers=headers,
         )
         assert update_response.status_code == 200
         assert update_response.json()["content"] == "Aktualisiert"
+        assert update_response.json()["tags"] == ["privat"]
+
+        missing_tag_response = client.get("/api/entries?tag=python", headers=headers)
+        assert missing_tag_response.status_code == 200
+        assert missing_tag_response.json()["entries"] == []
 
         previous_day_response = client.get(f"/api/entries?day={yesterday.date().isoformat()}", headers=headers)
         assert previous_day_response.status_code == 200
         previous_day_payload = previous_day_response.json()
         assert previous_day_payload["day"] == yesterday.date().isoformat()
         assert previous_day_payload["next_day"] == today.date().isoformat()
+        assert previous_day_payload["available_tags"] == []
         assert len(previous_day_payload["entries"]) == 1
 
         delete_response = client.delete(f"/api/entries/{entry_id}", headers=headers)
@@ -82,7 +99,9 @@ def test_entry_crud_flow(tmp_path: Path) -> None:
     sqlite_connection = sqlite3.connect(sqlite_path)
     try:
         version = sqlite_connection.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()
-        assert version == (0,)
+        tags = sqlite_connection.execute("SELECT name FROM tags ORDER BY name").fetchall()
+        assert version == (1,)
+        assert tags == []
     finally:
         sqlite_connection.close()
 
@@ -130,7 +149,11 @@ def test_existing_unversioned_database_gets_version_table(tmp_path: Path) -> Non
     try:
         version = sqlite_connection.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()
         row_count = sqlite_connection.execute("SELECT COUNT(*) FROM entries").fetchone()
-        assert version == (0,)
+        tags_tables = sqlite_connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('tags', 'entry_tags') ORDER BY name"
+        ).fetchall()
+        assert version == (1,)
         assert row_count == (1,)
+        assert tags_tables == [("entry_tags",), ("tags",)]
     finally:
         sqlite_connection.close()
