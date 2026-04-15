@@ -382,8 +382,8 @@ textarea {
 @media (max-width: 640px) {
     .entries-toolbar {
         display: grid;
-        grid-template-columns: repeat(4, max-content);
-        justify-content: start;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        width: 100%;
         gap: 4px;
     }
 
@@ -396,6 +396,7 @@ textarea {
     }
 
     .entries-toolbar .toolbar-button {
+        width: 100%;
         min-width: 0;
         min-height: 32px;
         padding: 5px 8px;
