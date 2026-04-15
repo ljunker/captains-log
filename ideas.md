@@ -29,6 +29,11 @@
 - die version könnte auch automatisch aktualisiert werden, z.B. durch einen cronjob, der regelmäßig die neueste version von docker hub überprüft und die umgebungsvariable oder die datei aktualisiert, wenn eine neue version verfügbar ist
 - beim start des containers könnte auch überprüft werden, ob die aktuelle version mit der neuesten version übereinstimmt, und eine warnung ausgegeben werden, wenn dies nicht der fall ist, um die benutzer zu ermutigen, auf die neueste version zu aktualisieren.
 
+### automatisches git tag mit patch minor major version
+- ich will ein kleines bash script, was mir automatisch ein git tag erstellt und pusht
+- ich will "./pushtag minor" eingeben, und das script soll sich den letzten git tag holen, die version ordetlich hoch setzen (also von v1.0.1 -> "./pushtag minor" -> v1.1.0) und dann den neuen tag erstellen und pushen
+- das script könnte auch die option haben, die version manuell anzugeben, z.B. "./pushtag v1.2.0", um einen bestimmten tag zu erstellen und zu pushen
+
 ## usability
 
 ### tags
