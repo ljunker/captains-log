@@ -14,7 +14,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.database import Base, engine, get_db
+from app.database import engine, get_db
+from app.migration import run_migrations
 from app.models import Entry
 from app.schemas import EntryCreate, EntryListResponse, EntryRead, EntryUpdate
 from app.timezone import APP_TIMEZONE, local_date
@@ -28,7 +29,7 @@ INLINE_CSS = (BASE_DIR / "app" / "static" / "style.css").read_text(encoding="utf
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    Base.metadata.create_all(bind=engine)
+    run_migrations(engine)
     yield
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import os
+import sqlite3
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -15,7 +16,7 @@ def test_entry_crud_flow(tmp_path: Path) -> None:
     os.environ["API_KEY"] = "test-key"
     os.environ["APP_TIMEZONE"] = "UTC"
 
-    for module_name in ["app.config", "app.database", "app.models", "app.main"]:
+    for module_name in ["app.config", "app.database", "app.migration", "app.models", "app.main"]:
         sys.modules.pop(module_name, None)
 
     app_module = importlib.import_module("app.main")
@@ -77,3 +78,59 @@ def test_entry_crud_flow(tmp_path: Path) -> None:
 
         missing_response = client.get(f"/api/entries/{entry_id}", headers=headers)
         assert missing_response.status_code == 404
+
+    sqlite_connection = sqlite3.connect(sqlite_path)
+    try:
+        version = sqlite_connection.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()
+        assert version == (0,)
+    finally:
+        sqlite_connection.close()
+
+
+def test_existing_unversioned_database_gets_version_table(tmp_path: Path) -> None:
+    sqlite_path = tmp_path / "legacy.db"
+    connection = sqlite3.connect(sqlite_path)
+    try:
+        connection.executescript(
+            """
+            CREATE TABLE entries (
+                id INTEGER NOT NULL,
+                title VARCHAR(200) DEFAULT '' NOT NULL,
+                content TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                PRIMARY KEY (id)
+            );
+            CREATE INDEX ix_entries_id ON entries (id);
+            INSERT INTO entries (content, created_at, updated_at)
+            VALUES ('Altbestand', '2026-04-10 08:00:00', '2026-04-10 08:00:00');
+            """
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    os.environ["SQLITE_PATH"] = str(sqlite_path)
+    os.environ["API_KEY"] = "test-key"
+    os.environ["APP_TIMEZONE"] = "UTC"
+
+    for module_name in ["app.config", "app.database", "app.migration", "app.models", "app.main"]:
+        sys.modules.pop(module_name, None)
+
+    app_module = importlib.import_module("app.main")
+
+    with TestClient(app_module.app) as client:
+        response = client.get("/api/entries", headers={"X-API-Key": "test-key"})
+        assert response.status_code == 200
+        payload = response.json()
+        assert len(payload["entries"]) == 1
+        assert payload["entries"][0]["content"] == "Altbestand"
+
+    sqlite_connection = sqlite3.connect(sqlite_path)
+    try:
+        version = sqlite_connection.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()
+        row_count = sqlite_connection.execute("SELECT COUNT(*) FROM entries").fetchone()
+        assert version == (0,)
+        assert row_count == (1,)
+    finally:
+        sqlite_connection.close()

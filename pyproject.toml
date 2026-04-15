@@ -25,4 +25,4 @@ dev = [
 include = ["app*"]
 
 [tool.setuptools.package-data]
-app = ["templates/*.html", "static/*.css"]
+app = ["migrations/*.sql", "templates/*.html", "static/*.css"]

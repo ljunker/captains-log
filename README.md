@@ -71,6 +71,15 @@ curl -X POST http://127.0.0.1:8000/api/entries \
   -d '{"content":"Erster Testeintrag"}'
 ```
 
+## Datenbank-Migrationen
+
+Beim App-Start wird die SQLite-Datenbank versioniert.
+
+- Die Versionsnummer liegt in der Tabelle `schema_version`.
+- SQL-Migrationen liegen unter [`app/migrations`](/Users/lj/PycharmProjects/captains_log/app/migrations).
+- `000_initial.sql` beschreibt den initialen Tabellenstand.
+- Bestehende Datenbanken ohne `schema_version` werden beim ersten Start übernommen und auf Version `0` gesetzt.
+
 ## Docker Compose
 
 ```bash

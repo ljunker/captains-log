@@ -2,7 +2,7 @@
 
 ## data management
 
-### datenbank versionierung
+### datenbank versionierung ERLEDIGT
 - tabelle für die version anlegen
 - wenns die tabelle nicht gibt, anlegen mit version 0
 - ordner mit migrationsdateien anlegen, die die änderungen an der datenbankstruktur beschreiben, z.b. neue tabellen, spalten, etc.

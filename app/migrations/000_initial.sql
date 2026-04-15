@@ -1,0 +1,10 @@
+CREATE TABLE entries (
+    id INTEGER NOT NULL,
+    title VARCHAR(200) DEFAULT '' NOT NULL,
+    content TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    PRIMARY KEY (id)
+);
+
+CREATE INDEX ix_entries_id ON entries (id);
