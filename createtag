@@ -5,14 +5,13 @@ set -euo pipefail
 usage() {
     cat <<'EOF'
 Usage:
-  ./pushtag patch
-  ./pushtag minor
-  ./pushtag major
-  ./pushtag v1.2.3
-  ./pushtag --dry-run patch
-  ./pushtag --remote upstream minor
+  ./createtag patch
+  ./createtag minor
+  ./createtag major
+  ./createtag v1.2.3
+  ./createtag --dry-run patch
 
-Creates an annotated git tag and pushes it to the selected remote.
+Creates an annotated local git tag.
 EOF
 }
 
@@ -63,25 +62,6 @@ ensure_git_repo() {
     git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "This script must be run inside a git repository."
 }
 
-select_remote() {
-    local requested="${1:-}"
-
-    if [[ -n "$requested" ]]; then
-        git remote get-url "$requested" >/dev/null 2>&1 || die "Git remote '$requested' does not exist."
-        printf '%s\n' "$requested"
-        return
-    fi
-
-    if git remote get-url origin >/dev/null 2>&1; then
-        printf 'origin\n'
-        return
-    fi
-
-    requested="$(git remote | head -n 1 || true)"
-    [[ -n "$requested" ]] || die "No git remote found. Use --remote after configuring one."
-    printf '%s\n' "$requested"
-}
-
 latest_semver_tag() {
     git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1
 }
@@ -94,7 +74,6 @@ ensure_tag_absent() {
 }
 
 main() {
-    local remote=""
     local dry_run=0
     local mode=""
 
@@ -102,12 +81,6 @@ main() {
         case "$1" in
             --dry-run)
                 dry_run=1
-                shift
-                ;;
-            --remote)
-                shift
-                (($#)) || die "--remote requires a value."
-                remote="$1"
                 shift
                 ;;
             -h|--help)
@@ -135,11 +108,6 @@ main() {
     [[ -n "$mode" ]] || die "Missing version argument."
 
     ensure_git_repo
-    remote="$(select_remote "$remote")"
-
-    if ((dry_run == 0)); then
-        git fetch --tags "$remote"
-    fi
 
     local tag
     local latest_tag
@@ -156,21 +124,19 @@ main() {
 
     ensure_tag_absent "$tag"
 
-    printf 'Remote: %s\n' "$remote"
     if [[ -n "${latest_tag:-}" ]]; then
         printf 'Latest tag: %s\n' "$latest_tag"
     fi
     printf 'New tag: %s\n' "$tag"
 
     if ((dry_run)); then
-        printf 'Dry run: no tag created and nothing pushed.\n'
+        printf 'Dry run: no tag created.\n'
         exit 0
     fi
 
     git tag -a "$tag" -m "Release $tag"
-    git push "$remote" "$tag"
 
-    printf 'Created and pushed %s to %s.\n' "$tag" "$remote"
+    printf 'Created local tag %s.\n' "$tag"
 }
 
 main "$@"
