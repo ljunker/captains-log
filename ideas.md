@@ -43,3 +43,58 @@
 - tags könnten auch mit farben oder icons versehen werden, um sie visuell ansprechender zu machen und die benutzerfreundlichkeit zu erhöhen
 - tags könnten auch in der suche berücksichtigt werden, um die relevanz der suchergebnisse zu erhöhen, z.B. könnte ein eintrag mit dem tag "python" höher in den suchergebnissen erscheinen, wenn nach "python" gesucht wird.
 - auch so tags wie "privat" oder "arbeit" könnten nützlich sein, um einträge zu kategorisieren und zu filtern
+
+### volltextsuche
+- einträge sollten per volltextsuche durchsuchbar sein, nicht nur nach tag oder tag
+- sqlite fts5 könnte dafür genutzt werden, damit die suche auch bei vielen einträgen schnell bleibt
+- die suche sollte sowohl content als auch tags berücksichtigen
+- in der ui könnte es oben ein kleines suchfeld geben, das live filtert oder per enter absendet
+- suchtreffer könnten die passenden textstellen kurz hervorheben
+
+### export und import
+- es sollte einen export aller einträge als json geben, damit man die daten jederzeit aus dem system herausbekommt
+- zusätzlich wäre ein markdown export sinnvoll, damit man das tagebuch auch außerhalb der app lesen kann
+- ein import aus json wäre praktisch, um backups oder alte daten wieder einzuspielen
+- beim import sollte es eine option geben, doppelte einträge zu erkennen und nicht blind alles erneut anzulegen
+
+### erinnerungen
+- man könnte tägliche oder wöchentliche erinnerungen einbauen, damit regelmäßig neue einträge entstehen
+- technisch wäre das zunächst eher ein serverseitiger cronjob oder eine mail-benachrichtigung
+- später könnte daraus auch eine web-push-benachrichtigung werden
+- erinnerungen sollten zeitlich konfigurierbar sein, z.B. werktags um 18 uhr
+
+### kalenderansicht
+- zusätzlich zur tagesansicht wäre eine kalenderansicht sinnvoll, um schnell zu sehen, an welchen tagen schon einträge existieren
+- tage mit vielen einträgen könnten farblich stärker hervorgehoben werden
+- ein klick auf einen tag sollte direkt in die bestehende tagesansicht springen
+- auf mobile müsste die kalenderansicht reduziert und sehr kompakt sein
+
+### anhänge
+- einträge könnten optionale dateianhänge bekommen, z.B. bilder, pdfs oder kurze sprachmemos
+- dateien sollten nicht direkt in sqlite gespeichert werden, sondern in einem eigenen ordner oder objekt-storage liegen
+- in der ui könnte pro eintrag ein kleiner anhangsbereich mit upload und vorschau erscheinen
+- bei bildern wäre eine automatische verkleinerung oder thumbnail-erzeugung sinnvoll
+
+### mehrere benutzer
+- aktuell ist die app eher für eine person gedacht, aber eine mehrbenutzerfähigkeit könnte interessant sein
+- dafür bräuchte es benutzerkonten, sessions und eine trennung der daten pro benutzer
+- tags, backups und exports müssten dann benutzerbezogen gedacht werden
+- langfristig könnte es auch geteilte logbücher oder teams geben
+
+### statistik und auswertung
+- man könnte einfache auswertungen einbauen, z.B. wie viele einträge pro woche oder pro monat entstanden sind
+- zusätzlich wäre spannend, welche tags am häufigsten vorkommen
+- eine heatmap über alle tage wäre visuell sehr hilfreich
+- die auswertung sollte rein lokal funktionieren und keine externen analysedienste brauchen
+
+### pwa und offline modus
+- die weboberfläche könnte als progressive web app gebaut werden, damit sie sich auf dem handy fast wie eine native app anfühlt
+- ein service worker könnte die statischen assets cachen und zuletzt geladene einträge offline verfügbar machen
+- neue einträge könnten offline zwischengespeichert und später synchronisiert werden
+- gerade für mobile wäre das nützlich, wenn man unterwegs kurz etwas notieren will
+
+### revisionshistorie
+- bei bearbeiteten einträgen könnte man alte versionen speichern, statt nur updated_at zu setzen
+- so ließe sich später nachvollziehen, was an einem eintrag geändert wurde
+- technisch könnte es dafür eine entry_revisions tabelle geben
+- in der ui könnte man pro eintrag eine kleine history-ansicht öffnen
