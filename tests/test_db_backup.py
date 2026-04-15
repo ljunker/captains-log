@@ -21,7 +21,7 @@ db_backup = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(db_backup)
 
 
-def create_sqlite_database(path: Path, schema_version: int = 1) -> None:
+def create_sqlite_database(path: Path, schema_version: int = 1, content: str = "Backup Test") -> None:
     connection = sqlite3.connect(path)
     try:
         connection.executescript(
@@ -35,10 +35,19 @@ def create_sqlite_database(path: Path, schema_version: int = 1) -> None:
                 id INTEGER PRIMARY KEY,
                 content TEXT NOT NULL
             );
-            INSERT INTO entries (content) VALUES ('Backup Test');
+            INSERT INTO entries (content) VALUES ({content!r});
             """
         )
         connection.commit()
+    finally:
+        connection.close()
+
+
+def read_entry_contents(path: Path) -> list[str]:
+    connection = sqlite3.connect(path)
+    try:
+        rows = connection.execute("SELECT content FROM entries ORDER BY id").fetchall()
+        return [row[0] for row in rows]
     finally:
         connection.close()
 
@@ -66,6 +75,45 @@ def test_create_and_verify_encrypted_backup(tmp_path: Path, monkeypatch: pytest.
     status, version = db_backup.verify_backup(backup_file, "super-secret-passphrase")
 
     assert status == "ok"
+    assert version == 7
+
+
+def test_restore_encrypted_backup_replaces_database_and_keeps_pre_restore_copy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    if shutil.which("openssl") is None:
+        pytest.skip("openssl is required for encrypted backup tests")
+
+    source_sqlite_path = tmp_path / "source.db"
+    restore_target_path = tmp_path / "restore.db"
+    backup_dir = tmp_path / "backups"
+    create_sqlite_database(source_sqlite_path, schema_version=7, content="Restored Content")
+    create_sqlite_database(restore_target_path, schema_version=2, content="Current Content")
+    monkeypatch.setenv("BACKUP_PASSPHRASE", "super-secret-passphrase")
+
+    backup_file = db_backup.create_backup(
+        source_database=source_sqlite_path,
+        backup_dir=backup_dir,
+        prefix="captains-log-db",
+        retention_days=30,
+        passphrase="super-secret-passphrase",
+    )
+
+    restored_database, pre_restore_backup = db_backup.restore_backup(
+        backup_file=backup_file,
+        source_database=restore_target_path,
+        passphrase="super-secret-passphrase",
+        create_pre_restore_backup=True,
+    )
+
+    assert restored_database == restore_target_path
+    assert pre_restore_backup is not None
+    assert pre_restore_backup.exists()
+    assert read_entry_contents(restored_database) == ["Restored Content"]
+    assert read_entry_contents(pre_restore_backup) == ["Current Content"]
+
+    _, version = db_backup.inspect_sqlite_database(restored_database)
     assert version == 7
 
 

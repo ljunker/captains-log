@@ -103,6 +103,7 @@ Beispiele:
 chmod +x ./db-backup
 BACKUP_PASSPHRASE='dein-lang-geheimer-wert' ./db-backup create
 BACKUP_PASSPHRASE='dein-lang-geheimer-wert' ./db-backup verify --latest
+BACKUP_PASSPHRASE='dein-lang-geheimer-wert' ./db-backup restore --latest
 BACKUP_PASSPHRASE='dein-lang-geheimer-wert' ./db-backup create --backup-dir /mnt/secure-backups/captains-log
 ```
 
@@ -113,6 +114,7 @@ Was das Script macht:
 - verschlüsselt ihn mit `openssl` per AES-256-CBC und PBKDF2
 - löscht Backups automatisch nach standardmäßig 30 Tagen
 - prüft Backups per Entschlüsselung, temporärem Restore und `PRAGMA integrity_check`
+- kann ein Backup direkt zurück in die produktive SQLite-Datei einspielen und legt dabei standardmäßig eine `.before-restore-...`-Sicherung der aktuellen DB an
 
 Für Docker-Deployments liest das Script standardmäßig die Datenbank aus dem Docker-Volume `captains_log_data`. Für lokale Setups kannst du `SQLITE_PATH` oder `DATABASE_URL` verwenden.
 
