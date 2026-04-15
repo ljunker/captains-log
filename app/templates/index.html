@@ -16,11 +16,23 @@
                 <p id="entry-count" class="entry-count"></p>
             </div>
             <div class="entries-toolbar">
-                <a class="ghost-link" href="{{ docs_path }}">Swagger</a>
-                <button type="button" id="previous-day-button" class="secondary">← Tag zurück</button>
-                <button type="button" id="next-day-button" class="secondary">Tag vor →</button>
-                <button type="button" id="refresh-button" class="secondary">Aktualisieren</button>
-                <button type="button" id="open-composer-button">Eintrag schreiben</button>
+                <a class="ghost-link toolbar-docs-link" href="{{ docs_path }}">Swagger</a>
+                <button type="button" id="previous-day-button" class="secondary toolbar-button" aria-label="Tag zurück">
+                    <span class="toolbar-label-desktop">← Tag zurück</span>
+                    <span class="toolbar-label-mobile" aria-hidden="true">&lt;-</span>
+                </button>
+                <button type="button" id="next-day-button" class="secondary toolbar-button" aria-label="Tag vor">
+                    <span class="toolbar-label-desktop">Tag vor →</span>
+                    <span class="toolbar-label-mobile" aria-hidden="true">-&gt;</span>
+                </button>
+                <button type="button" id="refresh-button" class="secondary toolbar-button toolbar-refresh-button" aria-label="Aktualisieren" title="Aktualisieren">
+                    <span class="toolbar-label-desktop">Aktualisieren</span>
+                    <span class="toolbar-label-mobile toolbar-icon" aria-hidden="true">↻</span>
+                </button>
+                <button type="button" id="open-composer-button" class="toolbar-button" aria-label="Neuer Eintrag" title="Neuer Eintrag">
+                    <span class="toolbar-label-desktop">Eintrag schreiben</span>
+                    <span class="toolbar-label-mobile" aria-hidden="true">C</span>
+                </button>
             </div>
         </div>
         <section class="shortcut-strip">
