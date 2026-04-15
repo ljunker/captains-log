@@ -27,3 +27,12 @@
 - die version könnte auch automatisch aktualisiert werden, z.B. durch einen cronjob, der regelmäßig die neueste version von docker hub überprüft und die umgebungsvariable oder die datei aktualisiert, wenn eine neue version verfügbar ist
 - beim start des containers könnte auch überprüft werden, ob die aktuelle version mit der neuesten version übereinstimmt, und eine warnung ausgegeben werden, wenn dies nicht der fall ist, um die benutzer zu ermutigen, auf die neueste version zu aktualisieren.
 
+## usability
+
+### tags
+- einträge sollen eine optionale liste an tags haben, um sie besser kategorisieren und filtern zu können
+- tags könnten in einer eigenen tabelle gespeichert werden, um redundanz zu vermeiden und die wartbarkeit zu erhöhen
+- tags könnten auch hierarchisch organisiert werden, z.B. könnte es einen tag "programmieren" geben, der untertags wie "python", "javascript", etc. hat
+- tags könnten auch mit farben oder icons versehen werden, um sie visuell ansprechender zu machen und die benutzerfreundlichkeit zu erhöhen
+- tags könnten auch in der suche berücksichtigt werden, um die relevanz der suchergebnisse zu erhöhen, z.B. könnte ein eintrag mit dem tag "python" höher in den suchergebnissen erscheinen, wenn nach "python" gesucht wird.
+- auch so tags wie "privat" oder "arbeit" könnten nützlich sein, um einträge zu kategorisieren und zu filtern
