@@ -6,6 +6,8 @@
 - tabelle für die version anlegen
 - wenns die tabelle nicht gibt, anlegen mit version 0
 - bei jedem update die version hochsetzen
+- ordner mit migrationsdateien anlegen, die die änderungen an der datenbankstruktur beschreiben, z.b. neue tabellen, spalten, etc.
+- den aktuellen stand bei der entwicklung dieses features als 000_initial.sql speichern, damit die initiale datenbankstruktur erstellt werden kann. da die tabelle dann mit version 0 erstellt wird, muss die 000_initial.sql dann nicht ausgeführt werden
 - beim start die migrationsdateien lesen und die versionen vergleichen
 - wenn die version der datenbank kleiner ist als die version der migrationsdatei, dann die migration ausführen und die version der datenbank hochsetzen
 - migrationsdateien sollten in einem ordner liegen und nach version nummer benannt sein, z.B. 001_initial.sql, 002_add_users.sql, etc.
