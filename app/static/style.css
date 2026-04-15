@@ -387,6 +387,10 @@ textarea {
         gap: 4px;
     }
 
+    .shortcut-strip {
+        display: none;
+    }
+
     .toolbar-docs-link {
         display: none;
     }
