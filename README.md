@@ -96,3 +96,18 @@ Wichtige Punkte:
 - In `server_name` deine echte Domain eintragen
 - Optional TLS/Let's Encrypt in deiner bestehenden `nginx`-Struktur ergänzen
 - Falls du `HOST_PORT` änderst, auch `proxy_pass` entsprechend anpassen
+
+## Git Tags
+
+Für semantische Release-Tags gibt es das Script [`./pushtag`](/Users/lj/PycharmProjects/captains_log/pushtag).
+
+```bash
+chmod +x ./pushtag
+./pushtag patch
+./pushtag minor
+./pushtag major
+./pushtag v1.2.0
+./pushtag --dry-run minor
+```
+
+Das Script holt vor dem Tagging die Remote-Tags, berechnet bei `patch`/`minor`/`major` die nächste Version, erstellt einen annotierten Tag und pusht ihn auf `origin` oder alternativ auf ein per `--remote` gewähltes Remote.
