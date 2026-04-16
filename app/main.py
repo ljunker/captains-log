@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from contextlib import asynccontextmanager
 from datetime import date, datetime
 from pathlib import Path
@@ -72,7 +73,13 @@ app.openapi = custom_openapi
 
 @app.middleware("http")
 async def require_api_key(request: Request, call_next):
-    if request.url.path.startswith("/static/") or request.url.path == "/favicon.ico":
+    request_path = request.scope.get("path", request.url.path)
+    if request_path.startswith("/static/") or request_path in {
+        "/favicon.ico",
+        "/manifest.webmanifest",
+        "/service-worker.js",
+        "/offline",
+    }:
         return await call_next(request)
 
     configured_api_key = settings.api_key
@@ -103,6 +110,9 @@ def read_home(request: Request) -> HTMLResponse:
     valid_query_key = settings.api_key and request.query_params.get("api_key") == settings.api_key
     query_suffix = f"?{urlencode({'api_key': settings.api_key})}" if valid_query_key else ""
     docs_path = f"{settings.root_path}/docs" if settings.root_path else "/docs"
+    manifest_path = f"{settings.root_path}/manifest.webmanifest" if settings.root_path else "/manifest.webmanifest"
+    service_worker_path = f"{settings.root_path}/service-worker.js" if settings.root_path else "/service-worker.js"
+    apple_touch_icon_path = f"{settings.root_path}/static/apple-touch-icon.png" if settings.root_path else "/static/apple-touch-icon.png"
 
     return templates.TemplateResponse(
         request=request,
@@ -113,8 +123,216 @@ def read_home(request: Request) -> HTMLResponse:
             "docs_path": f"{docs_path}{query_suffix}",
             "inline_css": INLINE_CSS,
             "app_timezone": settings.timezone_name,
+            "manifest_path": manifest_path,
+            "service_worker_path": service_worker_path,
+            "apple_touch_icon_path": apple_touch_icon_path,
         },
     )
+
+
+@app.get("/manifest.webmanifest", include_in_schema=False)
+def read_manifest() -> JSONResponse:
+    root_path = settings.root_path or ""
+    payload = {
+        "name": settings.app_name,
+        "short_name": "Captain's Log",
+        "description": app.description,
+        "start_url": f"{root_path}/" if root_path else "/",
+        "scope": f"{root_path}/" if root_path else "/",
+        "display": "standalone",
+        "orientation": "portrait",
+        "background_color": "#fbfbf8",
+        "theme_color": "#f5f5f2",
+        "icons": [
+            {
+                "src": f"{root_path}/static/app-icon-192.png" if root_path else "/static/app-icon-192.png",
+                "sizes": "192x192",
+                "type": "image/png",
+            },
+            {
+                "src": f"{root_path}/static/app-icon-512.png" if root_path else "/static/app-icon-512.png",
+                "sizes": "512x512",
+                "type": "image/png",
+            },
+        ],
+    }
+    return JSONResponse(payload, media_type="application/manifest+json")
+
+
+@app.get("/offline", include_in_schema=False)
+def read_offline_page() -> HTMLResponse:
+    return HTMLResponse(
+        """
+        <!DOCTYPE html>
+        <html lang="de">
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>Offline | Captain's Log</title>
+            <style>
+                body {
+                    margin: 0;
+                    min-height: 100vh;
+                    display: grid;
+                    place-items: center;
+                    padding: 24px;
+                    background: linear-gradient(180deg, #f5f5f2 0%, #fbfbf8 100%);
+                    color: #111111;
+                    font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+                }
+                main {
+                    width: min(560px, 100%);
+                    padding: 20px;
+                    border: 1px solid rgba(17, 17, 17, 0.14);
+                    background: rgba(255, 255, 255, 0.92);
+                }
+                p.eyebrow {
+                    margin: 0 0 10px;
+                    color: #8f1f1f;
+                    font: 700 0.72rem/1 "Avenir Next", "Helvetica Neue", Arial, sans-serif;
+                    letter-spacing: 0.18em;
+                    text-transform: uppercase;
+                }
+                h1 {
+                    margin: 0 0 8px;
+                    font-size: 1.7rem;
+                }
+                p {
+                    margin: 0;
+                    color: #666666;
+                    line-height: 1.5;
+                }
+            </style>
+        </head>
+        <body>
+            <main>
+                <p class="eyebrow">Offline</p>
+                <h1>Captain's Log ist gerade offline.</h1>
+                <p>Wenn du die Seite vorher schon geladen hattest, sollten zuletzt gecachte Inhalte weiterhin verfügbar sein.</p>
+            </main>
+        </body>
+        </html>
+        """
+    )
+
+
+@app.get("/service-worker.js", include_in_schema=False)
+def read_service_worker() -> Response:
+    service_worker_source = f"""
+const CACHE_NAME = "captains-log-v1";
+const ROOT_PATH = {json.dumps(settings.root_path or "")};
+const APP_SHELL = [
+  withRoot("/"),
+  withRoot("/offline"),
+  withRoot("/manifest.webmanifest"),
+  withRoot("/static/apple-touch-icon.png"),
+  withRoot("/static/app-icon-192.png"),
+  withRoot("/static/app-icon-512.png")
+];
+
+function withRoot(path) {{
+  return `${{ROOT_PATH}}${{path}}`;
+}}
+
+function isSameOrigin(requestUrl) {{
+  return new URL(requestUrl).origin === self.location.origin;
+}}
+
+function isNavigationRequest(request) {{
+  return request.mode === "navigate";
+}}
+
+function isApiCacheable(requestUrl) {{
+  const pathname = new URL(requestUrl).pathname;
+  return pathname.startsWith(withRoot("/api/entries")) || pathname.startsWith(withRoot("/api/tags/suggestions"));
+}}
+
+function isStaticCacheable(requestUrl) {{
+  const pathname = new URL(requestUrl).pathname;
+  return (
+    pathname === withRoot("/manifest.webmanifest") ||
+    pathname === withRoot("/offline") ||
+    pathname.startsWith(withRoot("/static/"))
+  );
+}}
+
+self.addEventListener("install", (event) => {{
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) =>
+      cache.addAll(APP_SHELL.map((path) => new Request(path, {{credentials: "include"}})))
+    )
+  );
+  self.skipWaiting();
+}});
+
+self.addEventListener("activate", (event) => {{
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))
+    )
+  );
+  self.clients.claim();
+}});
+
+async function networkFirst(request, fallbackPath = null) {{
+  const cache = await caches.open(CACHE_NAME);
+  try {{
+    const response = await fetch(request);
+    if (request.method === "GET" && response.ok) {{
+      cache.put(request, response.clone());
+    }}
+    return response;
+  }} catch (error) {{
+    const cachedResponse = await cache.match(request);
+    if (cachedResponse) {{
+      return cachedResponse;
+    }}
+    if (fallbackPath) {{
+      const fallbackResponse = await cache.match(fallbackPath);
+      if (fallbackResponse) {{
+        return fallbackResponse;
+      }}
+    }}
+    throw error;
+  }}
+}}
+
+async function staleWhileRevalidate(request) {{
+  const cache = await caches.open(CACHE_NAME);
+  const cachedResponse = await cache.match(request);
+  const networkPromise = fetch(request)
+    .then((response) => {{
+      if (response.ok) {{
+        cache.put(request, response.clone());
+      }}
+      return response;
+    }})
+    .catch(() => null);
+
+  return cachedResponse || networkPromise || fetch(request);
+}}
+
+self.addEventListener("fetch", (event) => {{
+  if (event.request.method !== "GET" || !isSameOrigin(event.request.url)) {{
+    return;
+  }}
+
+  if (isNavigationRequest(event.request)) {{
+    event.respondWith(networkFirst(event.request, withRoot("/offline")));
+    return;
+  }}
+
+  if (isApiCacheable(event.request.url)) {{
+    event.respondWith(networkFirst(event.request));
+    return;
+  }}
+
+  if (isStaticCacheable(event.request.url)) {{
+    event.respondWith(staleWhileRevalidate(event.request));
+  }}
+}});
+"""
+    return Response(service_worker_source, media_type="application/javascript")
 
 
 @app.get("/health", tags=["System"], summary="Healthcheck")
