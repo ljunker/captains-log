@@ -69,6 +69,14 @@ def test_entry_crud_flow(tmp_path: Path) -> None:
         assert len(filtered_payload["entries"]) == 1
         assert filtered_payload["entries"][0]["tags"] == ["arbeit", "python"]
 
+        tag_suggestions_response = client.get("/api/tags/suggestions?query=arb", headers=headers)
+        assert tag_suggestions_response.status_code == 200
+        assert tag_suggestions_response.json() == ["arbeit"]
+
+        all_tag_suggestions_response = client.get("/api/tags/suggestions?query=", headers=headers)
+        assert all_tag_suggestions_response.status_code == 200
+        assert all_tag_suggestions_response.json() == ["arbeit", "python"]
+
         update_response = client.put(
             f"/api/entries/{entry_id}",
             json={"content": "Aktualisiert", "tags": ["Privat"]},

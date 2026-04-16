@@ -179,6 +179,32 @@ def _set_entry_tags(entry: Entry, tag_names: list[str], db: Session) -> None:
 
 
 @app.get(
+    "/api/tags/suggestions",
+    response_model=list[str],
+    tags=["Tags"],
+    summary="Tag-Vorschläge laden",
+)
+def suggest_tags(
+    query: str = Query(description="Beginn eines Tags für Autocomplete"),
+    limit: int = Query(default=8, ge=1, le=20, description="Maximale Anzahl Vorschläge"),
+    db: Session = Depends(get_db),
+) -> list[str]:
+    stripped_query = query.strip()
+    statement = select(Tag.name).order_by(Tag.name.asc()).limit(limit)
+
+    if stripped_query:
+        normalized_query = normalize_tag_name(stripped_query)
+        statement = (
+            select(Tag.name)
+            .where(Tag.name.startswith(normalized_query))
+            .order_by(Tag.name.asc())
+            .limit(limit)
+        )
+
+    return list(db.scalars(statement))
+
+
+@app.get(
     "/api/entries",
     response_model=EntryListResponse,
     tags=["Entries"],

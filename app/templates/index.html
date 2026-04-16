@@ -63,9 +63,15 @@
 
         <input type="hidden" id="entry-id">
         <textarea id="content" name="content" rows="8" placeholder="Was soll heute festgehalten werden?" required></textarea>
-        <label class="field-group" for="tags">
+        <label class="field-group" for="tag-entry-input">
             <span class="field-label">Tags</span>
-            <input id="tags" name="tags" type="text" placeholder="z.B. arbeit, privat, python">
+            <input id="tags" name="tags" type="hidden">
+            <div id="selected-tags" class="tag-editor-list hidden"></div>
+            <div class="tag-editor-row">
+                <input id="tag-entry-input" name="tag-entry-input" type="text" placeholder="z.B. arbeit, privat, python" autocomplete="off">
+                <button type="button" id="add-tag-button" class="secondary tag-add-button" aria-label="Tag hinzufügen">+</button>
+            </div>
+            <div id="tag-suggestions" class="tag-editor-list hidden" aria-live="polite"></div>
         </label>
 
         <div class="composer-foot">
@@ -100,6 +106,9 @@
     const entryIdInput = document.getElementById("entry-id");
     const contentInput = document.getElementById("content");
     const tagsInput = document.getElementById("tags");
+    const tagEntryInput = document.getElementById("tag-entry-input");
+    const selectedTags = document.getElementById("selected-tags");
+    const addTagButton = document.getElementById("add-tag-button");
     const formStatus = document.getElementById("form-status");
     const entriesList = document.getElementById("entries-list");
     const template = document.getElementById("entry-template");
@@ -118,6 +127,7 @@
     const tagFilterStrip = document.getElementById("tag-filter-strip");
     const tagFilterList = document.getElementById("tag-filter-list");
     const clearTagFilterButton = document.getElementById("clear-tag-filter-button");
+    const tagSuggestions = document.getElementById("tag-suggestions");
     const rootPath = {{ root_path|tojson }};
     const appTimezone = {{ app_timezone|tojson }};
 
@@ -125,6 +135,8 @@
     let previousDay = null;
     let nextDay = null;
     let activeTag = null;
+    let latestTagSuggestionRequest = 0;
+    let composerTags = [];
 
     function appUrl(path) {
         const normalizedPath = path.startsWith("/") ? path : `/${path}`;
@@ -140,8 +152,12 @@
         entryIdInput.value = "";
         contentInput.value = "";
         tagsInput.value = "";
+        tagEntryInput.value = "";
+        composerTags = [];
         composerMode.textContent = "Neuer Eintrag";
         composerTitle.textContent = "Kurz festhalten, bevor es wieder weg ist.";
+        renderSelectedTags();
+        hideTagSuggestions();
         setStatus("");
     }
 
@@ -149,7 +165,10 @@
         if (entry) {
             entryIdInput.value = entry.id;
             contentInput.value = entry.content;
-            tagsInput.value = entry.tags.join(", ");
+            composerTags = [...entry.tags];
+            syncComposerTags();
+            renderSelectedTags();
+            tagEntryInput.value = "";
             composerMode.textContent = "Eintrag bearbeiten";
             composerTitle.textContent = `Eintrag #${entry.id} anpassen.`;
         } else {
@@ -201,6 +220,121 @@
             .split(",")
             .map((tag) => tag.trim())
             .filter(Boolean);
+    }
+
+    function normalizeTagInput(value) {
+        return value
+            .trim()
+            .toLowerCase()
+            .split(/\s+/)
+            .filter(Boolean)
+            .join(" ");
+    }
+
+    function syncComposerTags() {
+        tagsInput.value = composerTags.join(", ");
+    }
+
+    function hideTagSuggestions() {
+        tagSuggestions.innerHTML = "";
+        tagSuggestions.classList.add("hidden");
+    }
+
+    function renderSelectedTags() {
+        selectedTags.innerHTML = "";
+        selectedTags.classList.toggle("hidden", composerTags.length === 0);
+
+        for (const tag of composerTags) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "tag-chip tag-chip-selected";
+            const label = document.createElement("span");
+            label.textContent = `#${tag}`;
+            const removeIcon = document.createElement("span");
+            removeIcon.className = "tag-chip-remove";
+            removeIcon.setAttribute("aria-hidden", "true");
+            removeIcon.textContent = "×";
+            button.appendChild(label);
+            button.appendChild(removeIcon);
+            button.addEventListener("click", () => {
+                composerTags = composerTags.filter((candidate) => candidate !== tag);
+                syncComposerTags();
+                renderSelectedTags();
+                updateTagSuggestions();
+            });
+            selectedTags.appendChild(button);
+        }
+    }
+
+    function applyTagSuggestion(tag) {
+        if (composerTags.includes(tag)) {
+            tagEntryInput.value = "";
+            hideTagSuggestions();
+            return;
+        }
+
+        composerTags = [...composerTags, tag];
+        syncComposerTags();
+        renderSelectedTags();
+        tagEntryInput.value = "";
+        hideTagSuggestions();
+        tagEntryInput.focus();
+    }
+
+    function renderTagSuggestions(suggestions) {
+        tagSuggestions.innerHTML = "";
+        if (suggestions.length === 0) {
+            tagSuggestions.classList.add("hidden");
+            return;
+        }
+
+        for (const suggestion of suggestions) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "tag-chip tag-chip-button";
+            button.textContent = `#${suggestion}`;
+            button.addEventListener("mousedown", (event) => {
+                event.preventDefault();
+                applyTagSuggestion(suggestion);
+            });
+            tagSuggestions.appendChild(button);
+        }
+
+        tagSuggestions.classList.remove("hidden");
+    }
+
+    async function updateTagSuggestions() {
+        const requestId = ++latestTagSuggestionRequest;
+        const fragment = normalizeTagInput(tagEntryInput.value);
+
+        try {
+            const params = new URLSearchParams({query: fragment});
+            const response = await fetch(appUrl(`/api/tags/suggestions?${params.toString()}`));
+            if (!response.ok) {
+                throw new Error("Tag-Vorschläge konnten nicht geladen werden.");
+            }
+
+            const suggestions = await response.json();
+            if (requestId !== latestTagSuggestionRequest) {
+                return;
+            }
+
+            renderTagSuggestions(
+                suggestions.filter((suggestion) => !composerTags.includes(suggestion))
+            );
+        } catch (error) {
+            if (requestId === latestTagSuggestionRequest) {
+                hideTagSuggestions();
+            }
+        }
+    }
+
+    function addCurrentTag() {
+        const normalizedTag = normalizeTagInput(tagEntryInput.value);
+        if (!normalizedTag) {
+            return;
+        }
+        applyTagSuggestion(normalizedTag);
     }
 
     function renderTagFilters(availableTags) {
@@ -348,7 +482,7 @@
         const response = await fetch(url, {
             method,
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({content, tags: parseTagsInput(tagsInput.value)}),
+            body: JSON.stringify({content, tags: composerTags}),
         });
 
         if (!response.ok) {
@@ -394,6 +528,20 @@
             saveEntry();
         }
     });
+    tagEntryInput.addEventListener("input", updateTagSuggestions);
+    tagEntryInput.addEventListener("focus", updateTagSuggestions);
+    tagEntryInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            addCurrentTag();
+        }
+        if (event.key === "Escape") {
+            hideTagSuggestions();
+        }
+    });
+    tagEntryInput.addEventListener("blur", () => {
+        window.setTimeout(hideTagSuggestions, 120);
+    });
 
     refreshButton.addEventListener("click", () => loadEntries(currentDay, activeTag));
     previousDayButton.addEventListener("click", () => loadEntries(previousDay, activeTag));
@@ -402,6 +550,7 @@
     closeComposerButton.addEventListener("click", closeComposer);
     cancelButton.addEventListener("click", closeComposer);
     saveButton.addEventListener("click", saveEntry);
+    addTagButton.addEventListener("click", addCurrentTag);
     clearTagFilterButton.addEventListener("click", () => loadEntries(currentDay, null));
     composerBackdrop.addEventListener("click", (event) => {
         if (event.target === composerBackdrop) {

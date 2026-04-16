@@ -152,6 +152,15 @@ API_KEY=dein-schluessel HOST_PORT=8010 ./dockerhub-up
 
 Die SQLite-Datei liegt im benannten Volume `captains_log_data`.
 
+Für lokales Testen mit einem frischen Build aus dem aktuellen Repo gibt es zusätzlich [docker-compose.local.yml](/Users/lj/PycharmProjects/captains_log/docker-compose.local.yml).
+
+```bash
+docker compose -f docker-compose.local.yml up --build -d
+docker compose -f docker-compose.local.yml down
+```
+
+Die lokale Compose-Datei nutzt standardmäßig Port `8001` und ein separates Volume `captains_log_local_data`, damit sie nicht mit dem normalen Deployment kollidiert.
+
 ## Reverse Proxy auf dem Server
 
 Wenn auf deinem Server bereits `nginx` läuft, lass Compose nur die App starten und leite im Host-`nginx` auf `127.0.0.1:8000` weiter.

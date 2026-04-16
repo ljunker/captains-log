@@ -316,6 +316,12 @@ kbd {
     border-color: var(--line);
 }
 
+.tag-chip-button:hover {
+    background: var(--accent-soft);
+    color: var(--accent-dark);
+    border-color: rgba(143, 31, 31, 0.14);
+}
+
 .tag-chip-button.active {
     background: var(--ink);
     color: #ffffff;
@@ -410,6 +416,44 @@ input {
     font-size: 0.84rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;
+}
+
+.tag-editor-row,
+.tag-editor-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.tag-editor-row {
+    align-items: stretch;
+}
+
+.tag-editor-row input {
+    flex: 1;
+}
+
+.tag-add-button {
+    min-width: 42px;
+    padding: 0;
+    font-size: 1.05rem;
+}
+
+.tag-chip-selected {
+    gap: 6px;
+    background: rgba(17, 17, 17, 0.06);
+    color: var(--ink);
+    border-color: var(--line);
+}
+
+.tag-chip-selected:hover {
+    background: rgba(17, 17, 17, 0.1);
+    color: var(--ink);
+}
+
+.tag-chip-remove {
+    font-size: 0.95rem;
+    line-height: 1;
 }
 
 .composer-foot {

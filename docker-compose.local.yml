@@ -1,0 +1,19 @@
+services:
+  app:
+    build:
+      context: .
+    container_name: captains-log-app-local
+    environment:
+      DATABASE_URL: sqlite:////data/captains_log.db
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8000
+      API_KEY: ${API_KEY:-}
+      APP_ROOT_PATH: ${APP_ROOT_PATH:-}
+    ports:
+      - "127.0.0.1:${HOST_PORT_LOCAL:-8001}:8000"
+    volumes:
+      - captains_log_local_data:/data
+
+volumes:
+  captains_log_local_data:
+    name: captains_log_local_data
