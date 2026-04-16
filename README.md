@@ -161,6 +161,27 @@ docker compose -f docker-compose.local.yml down
 
 Die lokale Compose-Datei nutzt standardmäßig Port `8001` und ein separates Volume `captains_log_local_data`, damit sie nicht mit dem normalen Deployment kollidiert.
 
+## PWA und Offline
+
+Die Weboberfläche bringt einen ersten PWA-Stand mit:
+
+- `manifest.webmanifest` für Homescreen-Install
+- `apple-touch-icon` für iPhone/iPad
+- Service Worker für Offline-Fallback und Cache der zuletzt geladenen UI- und API-Antworten
+
+Zum Testen auf dem iPhone:
+
+```bash
+docker compose -f docker-compose.local.yml up --build -d
+```
+
+- die Seite auf dem iPhone in Safari öffnen
+- einmal online durch die Tagesansicht navigieren, damit Inhalte gecacht werden
+- über „Zum Home-Bildschirm“ hinzufügen
+- danach WLAN/Mobilfunk testweise ausschalten und die App erneut öffnen
+
+Der erste PWA-Schnitt cached Lesezugriffe und die App-Hülle. Offline-Sync für neu erstellte Einträge ist noch nicht enthalten.
+
 ## Reverse Proxy auf dem Server
 
 Wenn auf deinem Server bereits `nginx` läuft, lass Compose nur die App starten und leite im Host-`nginx` auf `127.0.0.1:8000` weiter.

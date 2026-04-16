@@ -29,6 +29,20 @@ def test_entry_crud_flow(tmp_path: Path) -> None:
         unauthorized_response = client.get("/api/entries")
         assert unauthorized_response.status_code == 401
 
+        manifest_response = client.get("/manifest.webmanifest")
+        assert manifest_response.status_code == 200
+        assert manifest_response.headers["content-type"].startswith("application/manifest+json")
+        assert manifest_response.json()["display"] == "standalone"
+
+        service_worker_response = client.get("/service-worker.js")
+        assert service_worker_response.status_code == 200
+        assert service_worker_response.headers["content-type"].startswith("application/javascript")
+        assert "captains-log-v1" in service_worker_response.text
+
+        offline_response = client.get("/offline")
+        assert offline_response.status_code == 200
+        assert "Captain's Log ist gerade offline" in offline_response.text
+
         today = datetime.now(UTC).replace(microsecond=0)
         yesterday = today - timedelta(days=1)
 
