@@ -85,18 +85,21 @@ def test_entry_crud_flow(tmp_path: Path) -> None:
                 f"/api/entries/{entry_id}/attachments",
                 headers=headers,
                 files=[
+                    ("files", ("iphone-shot.dng", b"raw-dng-payload", "image/x-adobe-dng")),
                     ("files", ("iphone-shot.heic", png_payload(), "image/png")),
                     ("files", ("memo.m4a", b"audio-test", "audio/mp4")),
                 ],
             )
         assert upload_response.status_code == 201
         attachments = upload_response.json()
-        assert len(attachments) == 2
-        assert [attachment["kind"] for attachment in attachments] == ["image", "audio"]
-        assert attachments[0]["thumbnail_url"].endswith("/thumbnail")
-        assert attachments[1]["thumbnail_url"] is None
-        image_attachment_id = attachments[0]["id"]
-        audio_attachment_id = attachments[1]["id"]
+        assert len(attachments) == 3
+        assert [attachment["kind"] for attachment in attachments] == ["image", "image", "audio"]
+        assert attachments[0]["thumbnail_url"] is None
+        assert attachments[1]["thumbnail_url"].endswith("/thumbnail")
+        assert attachments[2]["thumbnail_url"] is None
+        raw_attachment_id = attachments[0]["id"]
+        image_attachment_id = attachments[1]["id"]
+        audio_attachment_id = attachments[2]["id"]
 
         list_response = client.get("/api/entries", headers=headers)
         assert list_response.status_code == 200
@@ -107,7 +110,7 @@ def test_entry_crud_flow(tmp_path: Path) -> None:
         assert listed["active_tag"] is None
         assert listed["available_tags"] == ["arbeit", "python"]
         assert len(listed["entries"]) == 1
-        assert [attachment["kind"] for attachment in listed["entries"][0]["attachments"]] == ["image", "audio"]
+        assert [attachment["kind"] for attachment in listed["entries"][0]["attachments"]] == ["image", "image", "audio"]
 
         filtered_response = client.get("/api/entries?tag=python", headers=headers)
         assert filtered_response.status_code == 200
@@ -133,7 +136,14 @@ def test_entry_crud_flow(tmp_path: Path) -> None:
         assert update_response.status_code == 200
         assert update_response.json()["content"] == "Aktualisiert"
         assert update_response.json()["tags"] == ["privat"]
-        assert len(update_response.json()["attachments"]) == 2
+        assert len(update_response.json()["attachments"]) == 3
+
+        raw_file_response = client.get(f"/api/attachments/{raw_attachment_id}/file", headers=headers)
+        assert raw_file_response.status_code == 200
+        assert raw_file_response.headers["content-type"].startswith("image/x-adobe-dng")
+
+        raw_thumbnail_response = client.get(f"/api/attachments/{raw_attachment_id}/thumbnail", headers=headers)
+        assert raw_thumbnail_response.status_code == 404
 
         thumbnail_response = client.get(f"/api/attachments/{image_attachment_id}/thumbnail", headers=headers)
         assert thumbnail_response.status_code == 200
@@ -152,7 +162,7 @@ def test_entry_crud_flow(tmp_path: Path) -> None:
 
         refreshed_entry_response = client.get(f"/api/entries/{entry_id}", headers=headers)
         assert refreshed_entry_response.status_code == 200
-        assert [attachment["kind"] for attachment in refreshed_entry_response.json()["attachments"]] == ["image"]
+        assert [attachment["kind"] for attachment in refreshed_entry_response.json()["attachments"]] == ["image", "image"]
 
         missing_tag_response = client.get("/api/entries?tag=python", headers=headers)
         assert missing_tag_response.status_code == 200

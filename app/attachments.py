@@ -13,6 +13,7 @@ from app.config import settings
 register_heif_opener()
 
 IMAGE_MIME_BY_EXTENSION = {
+    ".dng": "image/x-adobe-dng",
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
     ".png": "image/png",
@@ -21,7 +22,8 @@ IMAGE_MIME_BY_EXTENSION = {
     ".heif": "image/heif",
 }
 IMAGE_EXTENSIONS = frozenset(IMAGE_MIME_BY_EXTENSION)
-IMAGE_MIME_TYPES = frozenset(IMAGE_MIME_BY_EXTENSION.values())
+IMAGE_MIME_TYPES = frozenset(IMAGE_MIME_BY_EXTENSION.values()) | {"image/dng"}
+THUMBNAIL_CAPABLE_IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"})
 
 AUDIO_MIME_BY_EXTENSION = {
     ".aac": "audio/aac",
@@ -66,6 +68,10 @@ def storage_path(storage_key: str) -> Path:
 
 def thumbnail_storage_key() -> str:
     return f"thumbnails/{uuid4().hex}.jpg"
+
+
+def can_generate_thumbnail(filename: str | None, mime_type: str) -> bool:
+    return normalized_extension(filename) in THUMBNAIL_CAPABLE_IMAGE_EXTENSIONS and mime_type in IMAGE_MIME_TYPES
 
 
 def create_image_thumbnail(source_bytes: bytes) -> bytes:

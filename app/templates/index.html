@@ -90,10 +90,10 @@
                 id="attachment-input"
                 name="attachments"
                 type="file"
-                accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif,audio/mp4,audio/x-m4a,audio/mpeg,audio/wav,audio/aac,.m4a,.mp3,.wav,.aac"
+                accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/x-adobe-dng,image/dng,.jpg,.jpeg,.png,.webp,.heic,.heif,.dng,audio/mp4,audio/x-m4a,audio/mpeg,audio/wav,audio/aac,.m4a,.mp3,.wav,.aac"
                 multiple
             >
-            <p class="field-hint">Mehrere Bilder oder Audiodateien. Bilder von der iPhone-Kamera inklusive HEIC/HEIF werden unterstützt.</p>
+            <p class="field-hint">Mehrere Bilder oder Audiodateien. Bilder von der iPhone-Kamera inklusive HEIC/HEIF und DNG werden unterstützt.</p>
             <div id="composer-existing-attachments" class="attachment-editor-list hidden"></div>
             <div id="composer-pending-attachments" class="attachment-editor-list hidden"></div>
         </label>
@@ -602,6 +602,12 @@
                         image.alt = attachment.original_filename;
                         image.loading = "lazy";
                         button.appendChild(image);
+                    } else if (attachment.kind === "image") {
+                        const badge = document.createElement("span");
+                        badge.className = "attachment-audio-icon";
+                        badge.setAttribute("aria-hidden", "true");
+                        badge.textContent = "RAW";
+                        button.appendChild(badge);
                     } else {
                         const badge = document.createElement("span");
                         badge.className = "attachment-audio-icon";
@@ -626,11 +632,27 @@
                         }
                         button.classList.add("active");
                         if (attachment.kind === "image") {
-                            const image = document.createElement("img");
-                            image.className = "attachment-full";
-                            image.src = attachment.file_url;
-                            image.alt = attachment.original_filename;
-                            attachmentPreview.appendChild(image);
+                            if (attachment.thumbnail_url || ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"].includes(attachment.mime_type)) {
+                                const image = document.createElement("img");
+                                image.className = "attachment-full";
+                                image.src = attachment.file_url;
+                                image.alt = attachment.original_filename;
+                                attachmentPreview.appendChild(image);
+                            } else {
+                                const fallback = document.createElement("div");
+                                fallback.className = "attachment-file-fallback";
+                                const message = document.createElement("p");
+                                message.textContent = "Dieses RAW-Bild kann dein Browser wahrscheinlich nicht direkt anzeigen.";
+                                const link = document.createElement("a");
+                                link.className = "ghost-link";
+                                link.href = attachment.file_url;
+                                link.target = "_blank";
+                                link.rel = "noopener noreferrer";
+                                link.textContent = "Originaldatei öffnen";
+                                fallback.appendChild(message);
+                                fallback.appendChild(link);
+                                attachmentPreview.appendChild(fallback);
+                            }
                         } else {
                             const audio = document.createElement("audio");
                             audio.controls = true;

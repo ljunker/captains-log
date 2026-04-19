@@ -92,9 +92,10 @@ curl -X POST http://127.0.0.1:8000/api/entries/1/attachments \
 Unterstützt werden im ersten Schnitt:
 
 - Bilder: `jpeg`, `png`, `webp`, `heic`, `heif`
+- Bilder: `jpeg`, `png`, `webp`, `heic`, `heif`, `dng`
 - Audio: `m4a`, `mp3`, `aac`, `wav`
 
-Bildanhänge bekommen serverseitig ein Thumbnail; in der UI wird erst das Thumbnail geladen und das eigentliche Bild erst beim Klick nachgezogen. Audio wird ebenfalls erst beim Klick als Player geladen.
+Bildanhänge bekommen serverseitig ein Thumbnail; in der UI wird erst das Thumbnail geladen und das eigentliche Bild erst beim Klick nachgezogen. Für DNG/RAW gibt es keinen Thumbnail-Zwang; diese Dateien werden als RAW-Kachel angezeigt und lassen sich bei Klick als Original öffnen. Audio wird ebenfalls erst beim Klick als Player geladen.
 
 ## Datenbank-Migrationen
 

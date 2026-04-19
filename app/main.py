@@ -25,6 +25,7 @@ from app.attachments import (
     ensure_upload_directories,
     file_url,
     image_mime_type_for_filename,
+    can_generate_thumbnail,
     storage_path,
     thumbnail_storage_key,
     thumbnail_url,
@@ -484,7 +485,7 @@ def _attachment_kind_for_upload(upload: UploadFile) -> tuple[str, str]:
 
     raise HTTPException(
         status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-        detail="Unsupported attachment type. Allowed: JPEG, PNG, WebP, HEIC, HEIF, MP3, M4A, AAC, WAV.",
+        detail="Unsupported attachment type. Allowed: JPEG, PNG, WebP, HEIC, HEIF, DNG, MP3, M4A, AAC, WAV.",
     )
 
 
@@ -511,7 +512,7 @@ def _store_attachment(entry: Entry, upload: UploadFile, db: Session) -> Attachme
 
     stored_thumbnail_key: str | None = None
     try:
-        if kind == "image":
+        if kind == "image" and can_generate_thumbnail(upload.filename, mime_type):
             thumbnail_bytes = create_image_thumbnail(payload)
             stored_thumbnail_key = thumbnail_storage_key()
             thumbnail_path = storage_path(stored_thumbnail_key)
