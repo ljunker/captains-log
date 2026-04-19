@@ -98,6 +98,16 @@ Bildanhänge bekommen serverseitig ein Thumbnail; in der UI wird erst das Thumbn
 
 Für Bildanhänge sind aktuell bis zu `100 MB` pro Datei erlaubt, damit auch größere iPhone-RAW-/DNG-Dateien funktionieren.
 
+Bereits hochgeladene DNG-Dateien kannst du nachträglich mit JPEG-Previews versehen:
+
+```bash
+chmod +x ./backfill-dng-previews
+./backfill-dng-previews
+./backfill-dng-previews --dry-run
+```
+
+Das Script verarbeitet nur bestehende Bildanhänge ohne `thumbnail_key`, die als DNG erkannt werden.
+
 ## Datenbank-Migrationen
 
 Beim App-Start wird die SQLite-Datenbank versioniert.
