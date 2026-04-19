@@ -5,7 +5,7 @@ from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 from app.tags import normalize_tag_name, normalize_tag_names
-from app.timezone import assume_utc
+from app.timezone import assume_utc, input_datetime_to_utc
 
 
 class EntryBase(BaseModel):
@@ -36,7 +36,21 @@ class EntryBase(BaseModel):
 
 
 class EntryCreate(EntryBase):
-    pass
+    created_at: datetime | None = None
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def default_created_at(cls, value: object) -> datetime | None:
+        if value in {None, ""}:
+            return None
+        return value
+
+    @field_validator("created_at")
+    @classmethod
+    def normalize_created_at(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        return input_datetime_to_utc(value)
 
 
 class EntryUpdate(EntryBase):

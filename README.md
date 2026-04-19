@@ -68,7 +68,7 @@ Beispiel für einen neuen Eintrag:
 curl -X POST http://127.0.0.1:8000/api/entries \
   -H "X-API-Key: dein-schluessel" \
   -H "Content-Type: application/json" \
-  -d '{"content":"Erster Testeintrag","tags":["arbeit","python"]}'
+  -d '{"content":"Erster Testeintrag","tags":["arbeit","python"],"created_at":"2026-04-19T21:30"}'
 ```
 
 Tags sind optional und werden normalisiert gespeichert. Einträge eines Tages kannst du zusätzlich nach einem Tag filtern:
@@ -77,6 +77,8 @@ Tags sind optional und werden normalisiert gespeichert. Einträge eines Tages ka
 curl -H "X-API-Key: dein-schluessel" \
   "http://127.0.0.1:8000/api/entries?tag=python"
 ```
+
+`created_at` beim Anlegen ist optional. Wenn der Wert fehlt oder leer ist, verwendet die App den aktuellen Zeitpunkt. Ein lokaler Wert ohne Zeitzone wie `2026-04-19T21:30` wird in der konfigurierten App-Zeitzone interpretiert.
 
 Anhänge können separat zu einem bestehenden Eintrag hochgeladen werden:
 

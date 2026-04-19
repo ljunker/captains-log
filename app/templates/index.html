@@ -70,6 +70,10 @@
 
         <input type="hidden" id="entry-id">
         <textarea id="content" name="content" rows="8" placeholder="Was soll heute festgehalten werden?" required></textarea>
+        <label class="field-group" for="created-at-input">
+            <span class="field-label">Timestamp</span>
+            <input id="created-at-input" name="created-at-input" type="datetime-local">
+        </label>
         <label class="field-group" for="tag-entry-input">
             <span class="field-label">Tags</span>
             <input id="tags" name="tags" type="hidden">
@@ -129,6 +133,7 @@
 <script>
     const entryIdInput = document.getElementById("entry-id");
     const contentInput = document.getElementById("content");
+    const createdAtInput = document.getElementById("created-at-input");
     const tagsInput = document.getElementById("tags");
     const tagEntryInput = document.getElementById("tag-entry-input");
     const selectedTags = document.getElementById("selected-tags");
@@ -190,6 +195,8 @@
     function resetComposer() {
         entryIdInput.value = "";
         contentInput.value = "";
+        createdAtInput.value = "";
+        createdAtInput.disabled = false;
         tagsInput.value = "";
         tagEntryInput.value = "";
         attachmentInput.value = "";
@@ -209,6 +216,8 @@
         if (entry) {
             entryIdInput.value = entry.id;
             contentInput.value = entry.content;
+            createdAtInput.value = toDateTimeLocalValue(entry.created_at);
+            createdAtInput.disabled = true;
             composerTags = [...entry.tags];
             composerExistingAttachmentState = entry.attachments.map((attachment) => ({...attachment, markedForRemoval: false}));
             pendingAttachmentFiles = [];
@@ -256,6 +265,15 @@
             year: "numeric",
             timeZone: appTimezone,
         }).format(new Date(`${value}T12:00:00Z`));
+    }
+
+    function toDateTimeLocalValue(value) {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return "";
+        }
+        const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+        return offsetDate.toISOString().slice(0, 16);
     }
 
     function updateDayButtons() {
@@ -681,7 +699,11 @@
         const response = await fetch(url, {
             method,
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({content, tags: composerTags}),
+            body: JSON.stringify(
+                entryId
+                    ? {content, tags: composerTags}
+                    : {content, tags: composerTags, created_at: createdAtInput.value || null}
+            ),
         });
 
         if (!response.ok) {

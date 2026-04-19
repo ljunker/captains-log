@@ -63,15 +63,21 @@ def test_entry_crud_flow(tmp_path: Path) -> None:
         db.commit()
         db.close()
 
+        custom_created_at = today.replace(hour=9, minute=15, second=0)
+
         create_response = client.post(
             "/api/entries",
-            json={"content": "Erster Eintrag", "tags": ["Arbeit", "Python", "arbeit"]},
+            json={
+                "content": "Erster Eintrag",
+                "tags": ["Arbeit", "Python", "arbeit"],
+                "created_at": custom_created_at.isoformat(),
+            },
             headers=headers,
         )
         assert create_response.status_code == 201
         created = create_response.json()
         entry_id = created["id"]
-        assert created["created_at"].endswith("+00:00")
+        assert created["created_at"] == custom_created_at.isoformat()
         assert created["tags"] == ["arbeit", "python"]
         assert created["attachments"] == []
 
@@ -95,7 +101,7 @@ def test_entry_crud_flow(tmp_path: Path) -> None:
         list_response = client.get("/api/entries", headers=headers)
         assert list_response.status_code == 200
         listed = list_response.json()
-        assert listed["day"] == today.date().isoformat()
+        assert listed["day"] == custom_created_at.date().isoformat()
         assert listed["previous_day"] == yesterday.date().isoformat()
         assert listed["next_day"] is None
         assert listed["active_tag"] is None

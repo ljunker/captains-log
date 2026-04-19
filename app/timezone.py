@@ -15,6 +15,12 @@ def assume_utc(value: datetime) -> datetime:
     return value.astimezone(UTC)
 
 
+def input_datetime_to_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=APP_TIMEZONE).astimezone(UTC)
+    return value.astimezone(UTC)
+
+
 def to_app_timezone(value: datetime) -> datetime:
     return assume_utc(value).astimezone(APP_TIMEZONE)
 

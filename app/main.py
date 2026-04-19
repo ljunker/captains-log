@@ -608,6 +608,9 @@ def list_entries(
 )
 def create_entry(payload: EntryCreate, db: Session = Depends(get_db)) -> EntryRead:
     entry = Entry(content=payload.content.strip())
+    if payload.created_at is not None:
+        entry.created_at = payload.created_at
+        entry.updated_at = payload.created_at
     db.add(entry)
     db.flush()
     _set_entry_tags(entry, payload.tags, db)
