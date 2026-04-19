@@ -43,12 +43,30 @@ class EntryUpdate(EntryBase):
     pass
 
 
+class AttachmentRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    kind: str
+    original_filename: str
+    mime_type: str
+    file_size: int
+    created_at: datetime
+    thumbnail_url: str | None = None
+    file_url: str
+
+    @field_serializer("created_at")
+    def serialize_datetime(self, value: datetime) -> str:
+        return assume_utc(value).isoformat()
+
+
 class EntryRead(EntryBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     created_at: datetime
     updated_at: datetime
+    attachments: list[AttachmentRead] = Field(default_factory=list)
 
     @field_validator("tags", mode="before")
     @classmethod

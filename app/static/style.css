@@ -425,6 +425,14 @@ input {
     letter-spacing: 0.08em;
 }
 
+.field-hint {
+    margin: 0;
+    color: var(--muted);
+    font-family: var(--sans);
+    font-size: 0.84rem;
+    line-height: 1.4;
+}
+
 .tag-editor-row,
 .tag-editor-list {
     display: flex;
@@ -461,6 +469,109 @@ input {
 .tag-chip-remove {
     font-size: 0.95rem;
     line-height: 1;
+}
+
+.attachment-editor-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.attachment-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 5px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: rgba(17, 17, 17, 0.04);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 0.82rem;
+}
+
+.attachment-pill:hover {
+    background: rgba(17, 17, 17, 0.08);
+}
+
+.attachment-pill-pending {
+    border-color: rgba(143, 31, 31, 0.18);
+    background: rgba(143, 31, 31, 0.06);
+    color: var(--accent-dark);
+}
+
+.attachment-pill-removed {
+    opacity: 0.52;
+    text-decoration: line-through;
+}
+
+.entry-attachments {
+    margin: 0 0 12px;
+}
+
+.attachment-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
+}
+
+.attachment-tile {
+    display: grid;
+    gap: 6px;
+    justify-items: stretch;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.82);
+    color: var(--ink);
+}
+
+.attachment-tile:hover,
+.attachment-tile.active {
+    background: rgba(17, 17, 17, 0.04);
+}
+
+.attachment-thumb {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    background: rgba(17, 17, 17, 0.04);
+}
+
+.attachment-label {
+    display: block;
+    padding: 0 8px 8px;
+    font-family: var(--sans);
+    font-size: 0.78rem;
+    line-height: 1.35;
+    word-break: break-word;
+}
+
+.attachment-audio-icon {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    background: rgba(143, 31, 31, 0.08);
+    color: var(--accent-dark);
+    font-size: 2rem;
+}
+
+.attachment-preview {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+}
+
+.attachment-full {
+    width: 100%;
+    max-height: 420px;
+    object-fit: contain;
+    background: rgba(17, 17, 17, 0.03);
+}
+
+.attachment-preview audio {
+    width: 100%;
 }
 
 .composer-foot {
@@ -555,5 +666,9 @@ input {
         min-height: 24px;
         padding: 4px 7px;
         font-size: 0.78rem;
+    }
+
+    .attachment-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }

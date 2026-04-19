@@ -78,6 +78,22 @@ curl -H "X-API-Key: dein-schluessel" \
   "http://127.0.0.1:8000/api/entries?tag=python"
 ```
 
+Anhänge können separat zu einem bestehenden Eintrag hochgeladen werden:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/entries/1/attachments \
+  -H "X-API-Key: dein-schluessel" \
+  -F "files=@/pfad/zum/foto.HEIC" \
+  -F "files=@/pfad/zur/sprachnotiz.m4a"
+```
+
+Unterstützt werden im ersten Schnitt:
+
+- Bilder: `jpeg`, `png`, `webp`, `heic`, `heif`
+- Audio: `m4a`, `mp3`, `aac`, `wav`
+
+Bildanhänge bekommen serverseitig ein Thumbnail; in der UI wird erst das Thumbnail geladen und das eigentliche Bild erst beim Klick nachgezogen. Audio wird ebenfalls erst beim Klick als Player geladen.
+
 ## Datenbank-Migrationen
 
 Beim App-Start wird die SQLite-Datenbank versioniert.
@@ -86,6 +102,7 @@ Beim App-Start wird die SQLite-Datenbank versioniert.
 - SQL-Migrationen liegen unter [`app/migrations`](/Users/lj/PycharmProjects/captains_log/app/migrations).
 - `000_initial.sql` beschreibt den initialen Tabellenstand.
 - Bestehende Datenbanken ohne `schema_version` werden beim ersten Start übernommen und auf Version `0` gesetzt.
+- Der aktuelle Stand enthält Migrationen für Tags und Anhänge.
 
 ## Datenbank-Backups
 

@@ -6,19 +6,34 @@ from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import urlencode
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile, status
 from fastapi.openapi.utils import get_openapi
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.attachments import (
+    AUDIO_MIME_TYPES,
+    IMAGE_MIME_TYPES,
+    MAX_AUDIO_FILE_SIZE,
+    MAX_IMAGE_FILE_SIZE,
+    audio_mime_type_for_filename,
+    build_storage_key,
+    create_image_thumbnail,
+    ensure_upload_directories,
+    file_url,
+    image_mime_type_for_filename,
+    storage_path,
+    thumbnail_storage_key,
+    thumbnail_url,
+)
 from app.config import settings
 from app.database import engine, get_db
 from app.migration import run_migrations
-from app.models import Entry, Tag
-from app.schemas import EntryCreate, EntryListResponse, EntryRead, EntryUpdate
+from app.models import Attachment, Entry, Tag
+from app.schemas import AttachmentRead, EntryCreate, EntryListResponse, EntryRead, EntryUpdate
 from app.tags import normalize_tag_name
 from app.timezone import APP_TIMEZONE, local_date
 
@@ -32,6 +47,7 @@ INLINE_CSS = (BASE_DIR / "app" / "static" / "style.css").read_text(encoding="utf
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     run_migrations(engine)
+    ensure_upload_directories()
     yield
 
 
@@ -341,12 +357,44 @@ def healthcheck() -> dict[str, str]:
 
 
 def _get_all_entries(db: Session) -> list[Entry]:
-    statement = select(Entry).options(selectinload(Entry.tags)).order_by(Entry.created_at.asc(), Entry.id.asc())
+    statement = (
+        select(Entry)
+        .options(selectinload(Entry.tags), selectinload(Entry.attachments))
+        .order_by(Entry.created_at.asc(), Entry.id.asc())
+    )
     return list(db.scalars(statement))
 
 
 def _tag_names(entry: Entry) -> list[str]:
     return [tag.name for tag in entry.tags]
+
+
+def _serialize_attachment(attachment: Attachment) -> AttachmentRead:
+    return AttachmentRead.model_validate(
+        {
+            "id": attachment.id,
+            "kind": attachment.kind,
+            "original_filename": attachment.original_filename,
+            "mime_type": attachment.mime_type,
+            "file_size": attachment.file_size,
+            "created_at": attachment.created_at,
+            "thumbnail_url": thumbnail_url(attachment.id) if attachment.thumbnail_key else None,
+            "file_url": file_url(attachment.id),
+        }
+    )
+
+
+def _serialize_entry(entry: Entry) -> EntryRead:
+    return EntryRead.model_validate(
+        {
+            "id": entry.id,
+            "content": entry.content,
+            "tags": _tag_names(entry),
+            "attachments": [_serialize_attachment(attachment) for attachment in entry.attachments],
+            "created_at": entry.created_at,
+            "updated_at": entry.updated_at,
+        }
+    )
 
 
 def _matches_tag(entry: Entry, selected_tag: str | None) -> bool:
@@ -394,6 +442,99 @@ def _set_entry_tags(entry: Entry, tag_names: list[str], db: Session) -> None:
     entry.tags = _get_or_create_tags(tag_names, db)
     db.flush()
     _delete_unused_tags(db)
+
+
+def _get_entry_or_404(entry_id: int, db: Session) -> Entry:
+    entry = db.scalar(
+        select(Entry)
+        .options(selectinload(Entry.tags), selectinload(Entry.attachments))
+        .where(Entry.id == entry_id)
+    )
+    if entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found")
+    return entry
+
+
+def _get_attachment_or_404(attachment_id: int, db: Session) -> Attachment:
+    attachment = db.get(Attachment, attachment_id)
+    if attachment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found")
+    return attachment
+
+
+def _delete_attachment_files(attachment: Attachment) -> None:
+    for storage_key in [attachment.storage_key, attachment.thumbnail_key]:
+        if not storage_key:
+            continue
+        target = storage_path(storage_key)
+        if target.exists():
+            target.unlink()
+
+
+def _attachment_kind_for_upload(upload: UploadFile) -> tuple[str, str]:
+    provided_mime = (upload.content_type or "").lower()
+    image_mime = image_mime_type_for_filename(upload.filename)
+    if provided_mime in IMAGE_MIME_TYPES or image_mime is not None:
+        return "image", provided_mime if provided_mime in IMAGE_MIME_TYPES else image_mime
+
+    audio_mime = audio_mime_type_for_filename(upload.filename)
+    if provided_mime in AUDIO_MIME_TYPES or audio_mime is not None:
+        normalized_audio_mime = "audio/mp4" if provided_mime == "audio/x-m4a" else provided_mime
+        return "audio", normalized_audio_mime if normalized_audio_mime in AUDIO_MIME_TYPES else audio_mime
+
+    raise HTTPException(
+        status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+        detail="Unsupported attachment type. Allowed: JPEG, PNG, WebP, HEIC, HEIF, MP3, M4A, AAC, WAV.",
+    )
+
+
+def _read_upload_bytes(upload: UploadFile, max_file_size: int) -> bytes:
+    payload = upload.file.read(max_file_size + 1)
+    if len(payload) > max_file_size:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Attachment too large",
+        )
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Attachment must not be empty")
+    return payload
+
+
+def _store_attachment(entry: Entry, upload: UploadFile, db: Session) -> Attachment:
+    kind, mime_type = _attachment_kind_for_upload(upload)
+    max_file_size = MAX_IMAGE_FILE_SIZE if kind == "image" else MAX_AUDIO_FILE_SIZE
+    payload = _read_upload_bytes(upload, max_file_size)
+    original_key = build_storage_key("originals", upload.filename)
+    original_path = storage_path(original_key)
+    original_path.parent.mkdir(parents=True, exist_ok=True)
+    original_path.write_bytes(payload)
+
+    stored_thumbnail_key: str | None = None
+    try:
+        if kind == "image":
+            thumbnail_bytes = create_image_thumbnail(payload)
+            stored_thumbnail_key = thumbnail_storage_key()
+            thumbnail_path = storage_path(stored_thumbnail_key)
+            thumbnail_path.parent.mkdir(parents=True, exist_ok=True)
+            thumbnail_path.write_bytes(thumbnail_bytes)
+    except Exception as exc:
+        if original_path.exists():
+            original_path.unlink()
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Image could not be processed") from exc
+
+    attachment = Attachment(
+        entry=entry,
+        kind=kind,
+        storage_key=original_key,
+        thumbnail_key=stored_thumbnail_key,
+        original_filename=upload.filename or "attachment",
+        mime_type=mime_type,
+        file_size=len(payload),
+        sort_order=len(entry.attachments),
+    )
+    db.add(attachment)
+    db.flush()
+    return attachment
 
 
 @app.get(
@@ -454,7 +595,7 @@ def list_entries(
         next_day=next_day,
         active_tag=selected_tag,
         available_tags=available_tags,
-        entries=entries,
+        entries=[_serialize_entry(entry) for entry in entries],
     )
 
 
@@ -465,37 +606,28 @@ def list_entries(
     tags=["Entries"],
     summary="Neuen Eintrag anlegen",
 )
-def create_entry(payload: EntryCreate, db: Session = Depends(get_db)) -> Entry:
+def create_entry(payload: EntryCreate, db: Session = Depends(get_db)) -> EntryRead:
     entry = Entry(content=payload.content.strip())
     db.add(entry)
     db.flush()
     _set_entry_tags(entry, payload.tags, db)
     db.commit()
-    db.refresh(entry)
-    return entry
-
-
-def _get_entry_or_404(entry_id: int, db: Session) -> Entry:
-    entry = db.get(Entry, entry_id)
-    if entry is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found")
-    return entry
+    return _serialize_entry(_get_entry_or_404(entry.id, db))
 
 
 @app.get("/api/entries/{entry_id}", response_model=EntryRead, tags=["Entries"], summary="Eintrag laden")
-def get_entry(entry_id: int, db: Session = Depends(get_db)) -> Entry:
-    return _get_entry_or_404(entry_id, db)
+def get_entry(entry_id: int, db: Session = Depends(get_db)) -> EntryRead:
+    return _serialize_entry(_get_entry_or_404(entry_id, db))
 
 
 @app.put("/api/entries/{entry_id}", response_model=EntryRead, tags=["Entries"], summary="Eintrag aktualisieren")
-def update_entry(entry_id: int, payload: EntryUpdate, db: Session = Depends(get_db)) -> Entry:
+def update_entry(entry_id: int, payload: EntryUpdate, db: Session = Depends(get_db)) -> EntryRead:
     entry = _get_entry_or_404(entry_id, db)
     entry.content = payload.content.strip()
     _set_entry_tags(entry, payload.tags, db)
     db.add(entry)
     db.commit()
-    db.refresh(entry)
-    return entry
+    return _serialize_entry(_get_entry_or_404(entry.id, db))
 
 
 @app.delete(
@@ -506,8 +638,83 @@ def update_entry(entry_id: int, payload: EntryUpdate, db: Session = Depends(get_
 )
 def delete_entry(entry_id: int, db: Session = Depends(get_db)) -> Response:
     entry = _get_entry_or_404(entry_id, db)
+    for attachment in list(entry.attachments):
+        _delete_attachment_files(attachment)
     db.delete(entry)
     db.flush()
     _delete_unused_tags(db)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@app.post(
+    "/api/entries/{entry_id}/attachments",
+    response_model=list[AttachmentRead],
+    status_code=status.HTTP_201_CREATED,
+    tags=["Attachments"],
+    summary="Anhänge zu einem Eintrag hochladen",
+)
+def upload_attachments(
+    entry_id: int,
+    files: list[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+) -> list[AttachmentRead]:
+    entry = _get_entry_or_404(entry_id, db)
+    created_attachments: list[Attachment] = []
+    try:
+        for upload in files:
+            created_attachments.append(_store_attachment(entry, upload, db))
+        db.commit()
+    except Exception:
+        db.rollback()
+        for attachment in created_attachments:
+            _delete_attachment_files(attachment)
+        raise
+    return [_serialize_attachment(attachment) for attachment in created_attachments]
+
+
+@app.get(
+    "/api/attachments/{attachment_id}/file",
+    tags=["Attachments"],
+    summary="Originaldatei eines Anhangs laden",
+)
+def get_attachment_file(attachment_id: int, db: Session = Depends(get_db)) -> FileResponse:
+    attachment = _get_attachment_or_404(attachment_id, db)
+    target = storage_path(attachment.storage_key)
+    if not target.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment file not found")
+    return FileResponse(
+        target,
+        media_type=attachment.mime_type,
+        filename=attachment.original_filename,
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
+
+
+@app.get(
+    "/api/attachments/{attachment_id}/thumbnail",
+    tags=["Attachments"],
+    summary="Thumbnail eines Bildanhangs laden",
+)
+def get_attachment_thumbnail(attachment_id: int, db: Session = Depends(get_db)) -> FileResponse:
+    attachment = _get_attachment_or_404(attachment_id, db)
+    if attachment.thumbnail_key is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment thumbnail not found")
+    target = storage_path(attachment.thumbnail_key)
+    if not target.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment thumbnail not found")
+    return FileResponse(target, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=3600"})
+
+
+@app.delete(
+    "/api/attachments/{attachment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["Attachments"],
+    summary="Anhang löschen",
+)
+def delete_attachment(attachment_id: int, db: Session = Depends(get_db)) -> Response:
+    attachment = _get_attachment_or_404(attachment_id, db)
+    _delete_attachment_files(attachment)
+    db.delete(attachment)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

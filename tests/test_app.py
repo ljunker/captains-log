@@ -5,14 +5,23 @@ import os
 import sqlite3
 import sys
 from datetime import UTC, datetime, timedelta
+from io import BytesIO
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from PIL import Image
+
+
+def png_payload() -> bytes:
+    buffer = BytesIO()
+    Image.new("RGB", (4, 4), "#336699").save(buffer, format="PNG")
+    return buffer.getvalue()
 
 
 def test_entry_crud_flow(tmp_path: Path) -> None:
     sqlite_path = tmp_path / "test.db"
     os.environ["SQLITE_PATH"] = str(sqlite_path)
+    os.environ["UPLOADS_PATH"] = str(tmp_path / "uploads")
     os.environ["API_KEY"] = "test-key"
     os.environ["APP_TIMEZONE"] = "UTC"
 
@@ -64,6 +73,24 @@ def test_entry_crud_flow(tmp_path: Path) -> None:
         entry_id = created["id"]
         assert created["created_at"].endswith("+00:00")
         assert created["tags"] == ["arbeit", "python"]
+        assert created["attachments"] == []
+
+        upload_response = client.post(
+                f"/api/entries/{entry_id}/attachments",
+                headers=headers,
+                files=[
+                    ("files", ("iphone-shot.heic", png_payload(), "image/png")),
+                    ("files", ("memo.m4a", b"audio-test", "audio/mp4")),
+                ],
+            )
+        assert upload_response.status_code == 201
+        attachments = upload_response.json()
+        assert len(attachments) == 2
+        assert [attachment["kind"] for attachment in attachments] == ["image", "audio"]
+        assert attachments[0]["thumbnail_url"].endswith("/thumbnail")
+        assert attachments[1]["thumbnail_url"] is None
+        image_attachment_id = attachments[0]["id"]
+        audio_attachment_id = attachments[1]["id"]
 
         list_response = client.get("/api/entries", headers=headers)
         assert list_response.status_code == 200
@@ -74,6 +101,7 @@ def test_entry_crud_flow(tmp_path: Path) -> None:
         assert listed["active_tag"] is None
         assert listed["available_tags"] == ["arbeit", "python"]
         assert len(listed["entries"]) == 1
+        assert [attachment["kind"] for attachment in listed["entries"][0]["attachments"]] == ["image", "audio"]
 
         filtered_response = client.get("/api/entries?tag=python", headers=headers)
         assert filtered_response.status_code == 200
@@ -99,6 +127,26 @@ def test_entry_crud_flow(tmp_path: Path) -> None:
         assert update_response.status_code == 200
         assert update_response.json()["content"] == "Aktualisiert"
         assert update_response.json()["tags"] == ["privat"]
+        assert len(update_response.json()["attachments"]) == 2
+
+        thumbnail_response = client.get(f"/api/attachments/{image_attachment_id}/thumbnail", headers=headers)
+        assert thumbnail_response.status_code == 200
+        assert thumbnail_response.headers["content-type"].startswith("image/jpeg")
+
+        image_file_response = client.get(f"/api/attachments/{image_attachment_id}/file", headers=headers)
+        assert image_file_response.status_code == 200
+        assert image_file_response.headers["content-type"].startswith("image/png")
+
+        audio_file_response = client.get(f"/api/attachments/{audio_attachment_id}/file", headers=headers)
+        assert audio_file_response.status_code == 200
+        assert audio_file_response.headers["content-type"].startswith("audio/mp4")
+
+        delete_attachment_response = client.delete(f"/api/attachments/{audio_attachment_id}", headers=headers)
+        assert delete_attachment_response.status_code == 204
+
+        refreshed_entry_response = client.get(f"/api/entries/{entry_id}", headers=headers)
+        assert refreshed_entry_response.status_code == 200
+        assert [attachment["kind"] for attachment in refreshed_entry_response.json()["attachments"]] == ["image"]
 
         missing_tag_response = client.get("/api/entries?tag=python", headers=headers)
         assert missing_tag_response.status_code == 200
@@ -122,8 +170,10 @@ def test_entry_crud_flow(tmp_path: Path) -> None:
     try:
         version = sqlite_connection.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()
         tags = sqlite_connection.execute("SELECT name FROM tags ORDER BY name").fetchall()
-        assert version == (1,)
+        attachment_count = sqlite_connection.execute("SELECT COUNT(*) FROM attachments").fetchone()
+        assert version == (2,)
         assert tags == []
+        assert attachment_count == (0,)
     finally:
         sqlite_connection.close()
 
@@ -152,6 +202,7 @@ def test_existing_unversioned_database_gets_version_table(tmp_path: Path) -> Non
         connection.close()
 
     os.environ["SQLITE_PATH"] = str(sqlite_path)
+    os.environ["UPLOADS_PATH"] = str(tmp_path / "uploads")
     os.environ["API_KEY"] = "test-key"
     os.environ["APP_TIMEZONE"] = "UTC"
 
@@ -172,10 +223,10 @@ def test_existing_unversioned_database_gets_version_table(tmp_path: Path) -> Non
         version = sqlite_connection.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()
         row_count = sqlite_connection.execute("SELECT COUNT(*) FROM entries").fetchone()
         tags_tables = sqlite_connection.execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('tags', 'entry_tags') ORDER BY name"
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('attachments', 'tags', 'entry_tags') ORDER BY name"
         ).fetchall()
-        assert version == (1,)
+        assert version == (2,)
         assert row_count == (1,)
-        assert tags_tables == [("entry_tags",), ("tags",)]
+        assert tags_tables == [("attachments",), ("entry_tags",), ("tags",)]
     finally:
         sqlite_connection.close()

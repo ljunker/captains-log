@@ -80,6 +80,19 @@
             </div>
             <div id="tag-suggestions" class="tag-editor-list hidden" aria-live="polite"></div>
         </label>
+        <label class="field-group" for="attachment-input">
+            <span class="field-label">Anhänge</span>
+            <input
+                id="attachment-input"
+                name="attachments"
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif,audio/mp4,audio/x-m4a,audio/mpeg,audio/wav,audio/aac,.m4a,.mp3,.wav,.aac"
+                multiple
+            >
+            <p class="field-hint">Mehrere Bilder oder Audiodateien. Bilder von der iPhone-Kamera inklusive HEIC/HEIF werden unterstützt.</p>
+            <div id="composer-existing-attachments" class="attachment-editor-list hidden"></div>
+            <div id="composer-pending-attachments" class="attachment-editor-list hidden"></div>
+        </label>
 
         <div class="composer-foot">
             <p id="form-status" class="status" aria-live="polite"></p>
@@ -102,6 +115,10 @@
         </div>
         <div class="entry-tags hidden"></div>
         <p class="entry-content"></p>
+        <section class="entry-attachments hidden">
+            <div class="attachment-grid"></div>
+            <div class="attachment-preview hidden"></div>
+        </section>
         <div class="card-actions">
             <button type="button" data-action="edit">Bearbeiten</button>
             <button type="button" data-action="delete" class="danger">Löschen</button>
@@ -116,6 +133,9 @@
     const tagEntryInput = document.getElementById("tag-entry-input");
     const selectedTags = document.getElementById("selected-tags");
     const addTagButton = document.getElementById("add-tag-button");
+    const attachmentInput = document.getElementById("attachment-input");
+    const composerExistingAttachments = document.getElementById("composer-existing-attachments");
+    const composerPendingAttachments = document.getElementById("composer-pending-attachments");
     const formStatus = document.getElementById("form-status");
     const entriesList = document.getElementById("entries-list");
     const template = document.getElementById("entry-template");
@@ -146,6 +166,8 @@
     let activeTag = null;
     let latestTagSuggestionRequest = 0;
     let composerTags = [];
+    let composerExistingAttachmentState = [];
+    let pendingAttachmentFiles = [];
 
     function appUrl(path) {
         const normalizedPath = path.startsWith("/") ? path : `/${path}`;
@@ -170,10 +192,15 @@
         contentInput.value = "";
         tagsInput.value = "";
         tagEntryInput.value = "";
+        attachmentInput.value = "";
         composerTags = [];
+        composerExistingAttachmentState = [];
+        pendingAttachmentFiles = [];
         composerMode.textContent = "Neuer Eintrag";
         composerTitle.textContent = "Kurz festhalten, bevor es wieder weg ist.";
         renderSelectedTags();
+        renderComposerExistingAttachments();
+        renderPendingAttachments();
         hideTagSuggestions();
         setStatus("");
     }
@@ -183,9 +210,14 @@
             entryIdInput.value = entry.id;
             contentInput.value = entry.content;
             composerTags = [...entry.tags];
+            composerExistingAttachmentState = entry.attachments.map((attachment) => ({...attachment, markedForRemoval: false}));
+            pendingAttachmentFiles = [];
             syncComposerTags();
             renderSelectedTags();
+            renderComposerExistingAttachments();
+            renderPendingAttachments();
             tagEntryInput.value = "";
+            attachmentInput.value = "";
             composerMode.textContent = "Eintrag bearbeiten";
             composerTitle.textContent = `Eintrag #${entry.id} anpassen.`;
         } else {
@@ -250,6 +282,13 @@
 
     function syncComposerTags() {
         tagsInput.value = composerTags.join(", ");
+    }
+
+    function formatFileSize(value) {
+        if (value < 1024 * 1024) {
+            return `${Math.max(1, Math.round(value / 1024))} KB`;
+        }
+        return `${(value / (1024 * 1024)).toFixed(1)} MB`;
     }
 
     function hideTagSuggestions() {
@@ -354,6 +393,88 @@
         applyTagSuggestion(normalizedTag);
     }
 
+    function renderComposerExistingAttachments() {
+        composerExistingAttachments.innerHTML = "";
+        composerExistingAttachments.classList.toggle("hidden", composerExistingAttachmentState.length === 0);
+
+        for (const attachment of composerExistingAttachmentState) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "attachment-pill";
+            if (attachment.markedForRemoval) {
+                button.classList.add("attachment-pill-removed");
+            }
+            button.textContent = `${attachment.kind === "image" ? "Bild" : "Audio"} · ${attachment.original_filename}`;
+            button.addEventListener("click", () => {
+                attachment.markedForRemoval = !attachment.markedForRemoval;
+                renderComposerExistingAttachments();
+            });
+            composerExistingAttachments.appendChild(button);
+        }
+    }
+
+    function renderPendingAttachments() {
+        composerPendingAttachments.innerHTML = "";
+        composerPendingAttachments.classList.toggle("hidden", pendingAttachmentFiles.length === 0);
+
+        for (const [index, file] of pendingAttachmentFiles.entries()) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "attachment-pill attachment-pill-pending";
+            button.textContent = `Neu · ${file.name} · ${formatFileSize(file.size)}`;
+            button.addEventListener("click", () => {
+                pendingAttachmentFiles = pendingAttachmentFiles.filter((_, candidateIndex) => candidateIndex !== index);
+                renderPendingAttachments();
+            });
+            composerPendingAttachments.appendChild(button);
+        }
+    }
+
+    async function removeMarkedAttachments() {
+        const marked = composerExistingAttachmentState.filter((attachment) => attachment.markedForRemoval);
+        for (const attachment of marked) {
+            const response = await fetch(appUrl(`/api/attachments/${attachment.id}`), {method: "DELETE"});
+            if (!response.ok) {
+                throw new Error("Anhang konnte nicht gelöscht werden.");
+            }
+        }
+        composerExistingAttachmentState = composerExistingAttachmentState.filter((attachment) => !attachment.markedForRemoval);
+    }
+
+    async function uploadPendingAttachments(entryId) {
+        if (pendingAttachmentFiles.length === 0) {
+            return;
+        }
+        const formData = new FormData();
+        for (const file of pendingAttachmentFiles) {
+            formData.append("files", file);
+        }
+        const response = await fetch(appUrl(`/api/entries/${entryId}/attachments`), {
+            method: "POST",
+            body: formData,
+        });
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.detail || "Anhänge konnten nicht hochgeladen werden.");
+        }
+        pendingAttachmentFiles = [];
+        attachmentInput.value = "";
+    }
+
+    async function syncAttachments(entryId) {
+        await removeMarkedAttachments();
+        await uploadPendingAttachments(entryId);
+        const response = await fetch(appUrl(`/api/entries/${entryId}`));
+        if (!response.ok) {
+            throw new Error("Aktualisierter Eintrag konnte nicht geladen werden.");
+        }
+        const entry = await response.json();
+        composerExistingAttachmentState = entry.attachments.map((attachment) => ({...attachment, markedForRemoval: false}));
+        renderComposerExistingAttachments();
+        renderPendingAttachments();
+        return entry;
+    }
+
     function renderTagFilters(availableTags) {
         const tagsToRender = activeTag && !availableTags.includes(activeTag) ? [activeTag, ...availableTags] : availableTags;
         tagFilterList.innerHTML = "";
@@ -444,6 +565,67 @@
                 }
             }
 
+            const attachmentSection = fragment.querySelector(".entry-attachments");
+            const attachmentGrid = fragment.querySelector(".attachment-grid");
+            const attachmentPreview = fragment.querySelector(".attachment-preview");
+            if (entry.attachments.length > 0) {
+                attachmentSection.classList.remove("hidden");
+                let activeAttachmentId = null;
+
+                for (const attachment of entry.attachments) {
+                    const button = document.createElement("button");
+                    button.type = "button";
+                    button.className = "attachment-tile";
+
+                    if (attachment.kind === "image" && attachment.thumbnail_url) {
+                        const image = document.createElement("img");
+                        image.className = "attachment-thumb";
+                        image.src = attachment.thumbnail_url;
+                        image.alt = attachment.original_filename;
+                        image.loading = "lazy";
+                        button.appendChild(image);
+                    } else {
+                        const badge = document.createElement("span");
+                        badge.className = "attachment-audio-icon";
+                        badge.setAttribute("aria-hidden", "true");
+                        badge.textContent = "♪";
+                        button.appendChild(badge);
+                    }
+
+                    const label = document.createElement("span");
+                    label.className = "attachment-label";
+                    label.textContent = attachment.original_filename;
+                    button.appendChild(label);
+
+                    button.addEventListener("click", () => {
+                        const alreadyOpen = activeAttachmentId === attachment.id;
+                        activeAttachmentId = alreadyOpen ? null : attachment.id;
+                        attachmentPreview.innerHTML = "";
+                        attachmentPreview.classList.toggle("hidden", alreadyOpen);
+                        attachmentGrid.querySelectorAll(".attachment-tile").forEach((tile) => tile.classList.remove("active"));
+                        if (alreadyOpen) {
+                            return;
+                        }
+                        button.classList.add("active");
+                        if (attachment.kind === "image") {
+                            const image = document.createElement("img");
+                            image.className = "attachment-full";
+                            image.src = attachment.file_url;
+                            image.alt = attachment.original_filename;
+                            attachmentPreview.appendChild(image);
+                        } else {
+                            const audio = document.createElement("audio");
+                            audio.controls = true;
+                            audio.preload = "metadata";
+                            audio.src = attachment.file_url;
+                            attachmentPreview.appendChild(audio);
+                        }
+                    });
+
+                    attachmentGrid.appendChild(button);
+                }
+            }
+
             const updateElement = fragment.querySelector(".entry-update");
             if (hasMeaningfulUpdate(entry.created_at, entry.updated_at)) {
                 updateElement.textContent = `Update: ${formatTime(entry.updated_at)}`;
@@ -508,7 +690,16 @@
             return;
         }
 
-        const savedEntry = await response.json();
+        let savedEntry = await response.json();
+        try {
+            savedEntry = await syncAttachments(savedEntry.id);
+        } catch (error) {
+            entryIdInput.value = String(savedEntry.id);
+            composerMode.textContent = "Eintrag bearbeiten";
+            composerTitle.textContent = `Eintrag #${savedEntry.id} anpassen.`;
+            setStatus(error.message || "Anhänge konnten nicht gespeichert werden.", true);
+            return;
+        }
         const targetDay = entryId ? currentDay : null;
         closeComposer();
         setStatus(`Eintrag #${savedEntry.id} gespeichert.`);
@@ -558,6 +749,12 @@
     });
     tagEntryInput.addEventListener("blur", () => {
         window.setTimeout(hideTagSuggestions, 120);
+    });
+    attachmentInput.addEventListener("change", () => {
+        const nextFiles = Array.from(attachmentInput.files || []);
+        pendingAttachmentFiles = [...pendingAttachmentFiles, ...nextFiles];
+        attachmentInput.value = "";
+        renderPendingAttachments();
     });
 
     refreshButton.addEventListener("click", () => loadEntries(currentDay, activeTag));

@@ -69,7 +69,7 @@
 - ein klick auf einen tag sollte direkt in die bestehende tagesansicht springen
 - auf mobile müsste die kalenderansicht reduziert und sehr kompakt sein
 
-### anhänge
+### anhänge - ERLEDIGT
 - einträge könnten optionale dateianhänge bekommen, z.B. bilder, pdfs oder kurze sprachmemos
 - dateien sollten nicht direkt in sqlite gespeichert werden, sondern in einem eigenen ordner oder objekt-storage liegen
 - in der ui könnte pro eintrag ein kleiner anhangsbereich mit upload und vorschau erscheinen

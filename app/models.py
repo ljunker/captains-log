@@ -38,6 +38,12 @@ class Entry(Base):
         back_populates="entries",
         lazy="selectin",
     )
+    attachments: Mapped[list["Attachment"]] = relationship(
+        back_populates="entry",
+        cascade="all, delete-orphan",
+        order_by="Attachment.sort_order, Attachment.id",
+        lazy="selectin",
+    )
 
 
 class Tag(Base):
@@ -49,3 +55,23 @@ class Tag(Base):
         secondary=entry_tags,
         back_populates="tags",
     )
+
+
+class Attachment(Base):
+    __tablename__ = "attachments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    entry_id: Mapped[int] = mapped_column(ForeignKey("entries.id"), nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    thumbnail_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    entry: Mapped[Entry] = relationship(back_populates="attachments")
