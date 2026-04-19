@@ -91,11 +91,12 @@ curl -X POST http://127.0.0.1:8000/api/entries/1/attachments \
 
 Unterstützt werden im ersten Schnitt:
 
-- Bilder: `jpeg`, `png`, `webp`, `heic`, `heif`
 - Bilder: `jpeg`, `png`, `webp`, `heic`, `heif`, `dng`
 - Audio: `m4a`, `mp3`, `aac`, `wav`
 
-Bildanhänge bekommen serverseitig ein Thumbnail; in der UI wird erst das Thumbnail geladen und das eigentliche Bild erst beim Klick nachgezogen. Für DNG/RAW gibt es keinen Thumbnail-Zwang; diese Dateien werden als RAW-Kachel angezeigt und lassen sich bei Klick als Original öffnen. Audio wird ebenfalls erst beim Klick als Player geladen.
+Bildanhänge bekommen serverseitig ein Thumbnail; in der UI wird erst das Thumbnail geladen und das eigentliche Bild erst beim Klick nachgezogen. Für DNG/RAW versucht der Server zusätzlich ein JPEG-Preview zu erzeugen, damit die Datei auch auf iPhone-Browsern angezeigt werden kann. Falls das für eine konkrete RAW-Datei nicht klappt, bleibt der Fallback auf die RAW-Kachel mit Originaldatei. Audio wird ebenfalls erst beim Klick als Player geladen.
+
+Für Bildanhänge sind aktuell bis zu `100 MB` pro Datei erlaubt, damit auch größere iPhone-RAW-/DNG-Dateien funktionieren.
 
 ## Datenbank-Migrationen
 

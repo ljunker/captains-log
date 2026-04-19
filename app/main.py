@@ -29,6 +29,7 @@ from app.attachments import (
     storage_path,
     thumbnail_storage_key,
     thumbnail_url,
+    is_raw_image,
 )
 from app.config import settings
 from app.database import engine, get_db
@@ -494,7 +495,7 @@ def _read_upload_bytes(upload: UploadFile, max_file_size: int) -> bytes:
     if len(payload) > max_file_size:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="Attachment too large",
+            detail=f"Attachment too large. Max size is {max_file_size // (1024 * 1024)} MB.",
         )
     if not payload:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Attachment must not be empty")
@@ -513,15 +514,18 @@ def _store_attachment(entry: Entry, upload: UploadFile, db: Session) -> Attachme
     stored_thumbnail_key: str | None = None
     try:
         if kind == "image" and can_generate_thumbnail(upload.filename, mime_type):
-            thumbnail_bytes = create_image_thumbnail(payload)
+            thumbnail_bytes = create_image_thumbnail(payload, upload.filename)
             stored_thumbnail_key = thumbnail_storage_key()
             thumbnail_path = storage_path(stored_thumbnail_key)
             thumbnail_path.parent.mkdir(parents=True, exist_ok=True)
             thumbnail_path.write_bytes(thumbnail_bytes)
     except Exception as exc:
-        if original_path.exists():
-            original_path.unlink()
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Image could not be processed") from exc
+        if is_raw_image(upload.filename):
+            stored_thumbnail_key = None
+        else:
+            if original_path.exists():
+                original_path.unlink()
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Image could not be processed") from exc
 
     attachment = Attachment(
         entry=entry,

@@ -635,7 +635,9 @@
                             if (attachment.thumbnail_url || ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"].includes(attachment.mime_type)) {
                                 const image = document.createElement("img");
                                 image.className = "attachment-full";
-                                image.src = attachment.file_url;
+                                image.src = attachment.thumbnail_url && ["image/x-adobe-dng", "image/dng"].includes(attachment.mime_type)
+                                    ? attachment.thumbnail_url
+                                    : attachment.file_url;
                                 image.alt = attachment.original_filename;
                                 attachmentPreview.appendChild(image);
                             } else {
