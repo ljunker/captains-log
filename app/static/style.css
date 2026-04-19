@@ -351,6 +351,7 @@ kbd {
     align-items: center;
     justify-content: center;
     padding: 20px;
+    overflow-y: auto;
     background: rgba(30, 23, 18, 0.34);
     backdrop-filter: blur(10px);
 }
@@ -361,9 +362,12 @@ kbd {
 
 .composer-card {
     width: min(720px, 100%);
+    max-height: min(calc(100vh - 40px), 920px);
     padding: 14px;
     border-radius: 2px;
     background: rgba(254, 249, 242, 0.96);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .composer-head {
@@ -622,6 +626,31 @@ input {
 }
 
 @media (max-width: 640px) {
+    .composer-backdrop {
+        align-items: flex-start;
+        padding: 10px;
+    }
+
+    .composer-card {
+        width: 100%;
+        max-height: calc(100dvh - 20px);
+        padding: 12px;
+    }
+
+    .composer-head {
+        margin-bottom: 10px;
+    }
+
+    textarea {
+        min-height: 132px;
+    }
+
+    .composer-foot {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid var(--line);
+    }
+
     .entries-toolbar {
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
