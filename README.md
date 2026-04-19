@@ -149,6 +149,8 @@ Was das Script macht:
 
 Für Docker-Deployments liest das Script standardmäßig die Datenbank aus dem Docker-Volume `captains_log_data`. Für lokale Setups kannst du `SQLITE_PATH` oder `DATABASE_URL` verwenden.
 
+Wichtig fuer Anhaenge im Docker-Betrieb: `UPLOADS_PATH` sollte auf `/data/uploads` zeigen, damit hochgeladene Dateien im Volume landen und bei Redeploys nicht verloren gehen.
+
 Eine Debian-13-Cron-Vorlage liegt in [ops/cron/captains-log-backup.cron.example](/Users/lj/PycharmProjects/captains_log/ops/cron/captains-log-backup.cron.example:1).
 
 ## Docker Compose
