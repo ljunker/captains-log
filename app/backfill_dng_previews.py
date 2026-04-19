@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+from pathlib import Path
 
 from sqlalchemy import or_, select
 
@@ -18,7 +19,7 @@ class BackfillResult:
     failed: int = 0
 
 
-def run_backfill(*, dry_run: bool = False, limit: int | None = None) -> BackfillResult:
+def run_backfill(*, dry_run: bool = False, limit: int | None = None, verbose: bool = False) -> BackfillResult:
     run_migrations(engine)
     attachments.ensure_upload_directories()
     result = BackfillResult()
@@ -45,6 +46,8 @@ def run_backfill(*, dry_run: bool = False, limit: int | None = None) -> Backfill
             original_path = attachments.storage_path(attachment.storage_key)
             if not original_path.exists():
                 result.failed += 1
+                if verbose:
+                    print(f"failed id={attachment.id} file={attachment.original_filename} reason=missing_original path={original_path}")
                 continue
 
             try:
@@ -52,11 +55,16 @@ def run_backfill(*, dry_run: bool = False, limit: int | None = None) -> Backfill
                     original_path.read_bytes(),
                     attachment.original_filename,
                 )
-            except Exception:
+            except Exception as exc:
                 result.failed += 1
+                if verbose:
+                    print(f"failed id={attachment.id} file={attachment.original_filename} reason={type(exc).__name__}: {exc}")
                 continue
 
             result.processed += 1
+            if verbose:
+                action = "would_process" if dry_run else "processed"
+                print(f"{action} id={attachment.id} file={attachment.original_filename}")
             if dry_run:
                 continue
 
@@ -82,13 +90,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Erzeugt JPEG-Previews fuer bestehende DNG-Anhaenge.")
     parser.add_argument("--dry-run", action="store_true", help="Nur pruefen, nichts schreiben.")
     parser.add_argument("--limit", type=int, default=None, help="Optional nur die ersten N Treffer verarbeiten.")
+    parser.add_argument("--verbose", action="store_true", help="Gibt Dateinamen und Fehlerursachen aus.")
     return parser
 
 
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
-    result = run_backfill(dry_run=args.dry_run, limit=args.limit)
+    result = run_backfill(dry_run=args.dry_run, limit=args.limit, verbose=args.verbose)
     print(
         f"processed={result.processed} skipped={result.skipped} failed={result.failed}"
         + (" dry_run=true" if args.dry_run else "")
