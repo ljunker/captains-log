@@ -120,18 +120,38 @@ def test_entry_crud_flow(tmp_path: Path) -> None:
         assert len(content_search_payload["entries"]) == 1
         assert content_search_payload["entries"][0]["id"] == entry_id
 
+        global_search_response = client.get("/api/search?q=erster", headers=headers)
+        assert global_search_response.status_code == 200
+        global_search_payload = global_search_response.json()
+        assert global_search_payload["query"] == "erster"
+        assert len(global_search_payload["results"]) == 1
+        assert global_search_payload["results"][0]["day"] == custom_created_at.date().isoformat()
+        assert global_search_payload["results"][0]["entry"]["id"] == entry_id
+
         tag_search_response = client.get("/api/entries?q=python", headers=headers)
         assert tag_search_response.status_code == 200
         assert tag_search_response.json()["entries"][0]["tags"] == ["arbeit", "python"]
+
+        global_tag_search_response = client.get("/api/search?q=python", headers=headers)
+        assert global_tag_search_response.status_code == 200
+        assert global_tag_search_response.json()["results"][0]["entry"]["tags"] == ["arbeit", "python"]
 
         attachment_search_response = client.get("/api/entries?q=memo", headers=headers)
         assert attachment_search_response.status_code == 200
         assert attachment_search_response.json()["entries"][0]["id"] == entry_id
 
+        global_attachment_search_response = client.get("/api/search?q=memo", headers=headers)
+        assert global_attachment_search_response.status_code == 200
+        assert global_attachment_search_response.json()["results"][0]["entry"]["id"] == entry_id
+
         missing_search_response = client.get("/api/entries?q=kommt-nicht-vor", headers=headers)
         assert missing_search_response.status_code == 200
         assert missing_search_response.json()["active_search"] == "kommt-nicht-vor"
         assert missing_search_response.json()["entries"] == []
+
+        missing_global_search_response = client.get("/api/search?q=kommt-nicht-vor", headers=headers)
+        assert missing_global_search_response.status_code == 200
+        assert missing_global_search_response.json() == {"query": "kommt-nicht-vor", "results": []}
 
         filtered_response = client.get("/api/entries?tag=python", headers=headers)
         assert filtered_response.status_code == 200

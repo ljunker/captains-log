@@ -248,6 +248,60 @@ kbd {
     padding: 0 0 12px;
 }
 
+.search-results-view {
+    display: grid;
+    gap: 8px;
+}
+
+.search-results-view.hidden {
+    display: none;
+}
+
+.search-results-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.search-results-head .eyebrow {
+    margin-bottom: 0;
+}
+
+.search-results-list {
+    display: grid;
+    gap: 8px;
+}
+
+.search-result-card {
+    display: grid;
+    gap: 8px;
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--line);
+    background: var(--card-strong);
+    color: var(--ink);
+    text-align: left;
+}
+
+.search-result-card:hover {
+    background: rgba(17, 17, 17, 0.04);
+}
+
+.search-result-meta,
+.search-result-tags {
+    color: var(--muted);
+    font-family: var(--sans);
+    font-size: 0.82rem;
+}
+
+.search-result-content {
+    font-family: var(--serif);
+    font-size: 1rem;
+    line-height: 1.45;
+    white-space: pre-wrap;
+}
+
 .tag-filter-head {
     display: flex;
     justify-content: space-between;

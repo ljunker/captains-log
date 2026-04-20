@@ -82,7 +82,7 @@ Für Volltextsuche kannst du `q` verwenden. Gesucht wird in Inhalt, Tags und Anh
 
 ```bash
 curl -H "X-API-Key: dein-schluessel" \
-  "http://127.0.0.1:8000/api/entries?q=python"
+  "http://127.0.0.1:8000/api/search?q=python"
 ```
 
 `created_at` beim Anlegen ist optional. Wenn der Wert fehlt oder leer ist, verwendet die App den aktuellen Zeitpunkt. Ein lokaler Wert ohne Zeitzone wie `2026-04-19T21:30` wird in der konfigurierten App-Zeitzone interpretiert.

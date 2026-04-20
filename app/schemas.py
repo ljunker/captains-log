@@ -112,3 +112,13 @@ class EntryListResponse(BaseModel):
     active_search: str | None
     available_tags: list[str]
     entries: list[EntryRead]
+
+
+class EntrySearchResult(BaseModel):
+    day: date
+    entry: EntryRead
+
+
+class EntrySearchResponse(BaseModel):
+    query: str
+    results: list[EntrySearchResult]

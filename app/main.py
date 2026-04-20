@@ -35,7 +35,7 @@ from app.config import settings
 from app.database import engine, get_db
 from app.migration import run_migrations
 from app.models import Attachment, Entry, Tag
-from app.schemas import AttachmentRead, EntryCreate, EntryListResponse, EntryRead, EntryUpdate
+from app.schemas import AttachmentRead, EntryCreate, EntryListResponse, EntryRead, EntrySearchResponse, EntryUpdate
 from app.tags import normalize_tag_name
 from app.timezone import APP_TIMEZONE, local_date
 
@@ -262,7 +262,7 @@ function isNavigationRequest(request) {{
 
 function isApiCacheable(requestUrl) {{
   const pathname = new URL(requestUrl).pathname;
-  return pathname.startsWith(withRoot("/api/entries")) || pathname.startsWith(withRoot("/api/tags/suggestions"));
+  return pathname.startsWith(withRoot("/api/entries")) || pathname.startsWith(withRoot("/api/search")) || pathname.startsWith(withRoot("/api/tags/suggestions"));
 }}
 
 function isStaticCacheable(requestUrl) {{
@@ -626,6 +626,38 @@ def list_entries(
         active_search=selected_search,
         available_tags=available_tags,
         entries=[_serialize_entry(entry) for entry in entries],
+    )
+
+
+@app.get(
+    "/api/search",
+    response_model=EntrySearchResponse,
+    tags=["Entries"],
+    summary="Einträge global durchsuchen",
+)
+def search_entries(
+    q: str = Query(description="Suchbegriff fuer Inhalt, Tags und Anhang-Dateinamen"),
+    limit: int = Query(default=50, ge=1, le=200, description="Maximale Anzahl Treffer"),
+    db: Session = Depends(get_db),
+) -> EntrySearchResponse:
+    selected_search = q.strip()
+    if not selected_search:
+        return EntrySearchResponse(query="", results=[])
+
+    matches = [
+        entry
+        for entry in sorted(_get_all_entries(db), key=lambda item: (item.created_at, item.id), reverse=True)
+        if _matches_search(entry, selected_search)
+    ][:limit]
+    return EntrySearchResponse(
+        query=selected_search,
+        results=[
+            {
+                "day": local_date(entry.created_at),
+                "entry": _serialize_entry(entry),
+            }
+            for entry in matches
+        ],
     )
 
 

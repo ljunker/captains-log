@@ -58,6 +58,13 @@
             </div>
             <div id="tag-filter-list" class="tag-filter-list"></div>
         </section>
+        <section id="search-results-view" class="search-results-view hidden">
+            <div class="search-results-head">
+                <p class="eyebrow">Suchergebnisse</p>
+                <button type="button" id="close-search-view-button" class="secondary">Zur Tagesansicht</button>
+            </div>
+            <div id="search-results-list" class="search-results-list"></div>
+        </section>
         <div id="entries-list" class="entries-list"></div>
     </section>
 </main>
@@ -167,6 +174,9 @@
     const tagSuggestions = document.getElementById("tag-suggestions");
     const searchInput = document.getElementById("search-input");
     const clearSearchButton = document.getElementById("clear-search-button");
+    const searchResultsView = document.getElementById("search-results-view");
+    const searchResultsList = document.getElementById("search-results-list");
+    const closeSearchViewButton = document.getElementById("close-search-view-button");
     const rootPath = {{ root_path|tojson }};
     const appTimezone = {{ app_timezone|tojson }};
     const serviceWorkerPath = {{ service_worker_path|tojson }};
@@ -545,6 +555,105 @@
         return response.json();
     }
 
+    async function fetchSearchResults(search) {
+        const params = new URLSearchParams({q: search});
+        const response = await fetch(appUrl(`/api/search?${params.toString()}`));
+        if (!response.ok) {
+            throw new Error("Suche konnte nicht geladen werden.");
+        }
+        return response.json();
+    }
+
+    function showDailyView() {
+        searchResultsView.classList.add("hidden");
+        entriesList.classList.remove("hidden");
+        tagFilterStrip.classList.toggle("hidden", tagFilterList.children.length === 0);
+    }
+
+    function showSearchView() {
+        searchResultsView.classList.remove("hidden");
+        entriesList.classList.add("hidden");
+        tagFilterStrip.classList.add("hidden");
+    }
+
+    function renderSearchResults(payload) {
+        activeSearch = payload.query || null;
+        clearSearchButton.classList.toggle("hidden", !activeSearch);
+        searchResultsList.innerHTML = "";
+        showSearchView();
+        dayLabel.textContent = "Suche";
+        previousDay = null;
+        nextDay = null;
+        previousDayButton.disabled = true;
+        nextDayButton.disabled = true;
+        entryCount.textContent = `${payload.results.length} ${payload.results.length === 1 ? "Treffer" : "Treffer"} für "${payload.query}"`;
+
+        if (payload.results.length === 0) {
+            const card = document.createElement("article");
+            card.className = "empty-card";
+            const heading = document.createElement("h3");
+            heading.textContent = "Keine Treffer gefunden.";
+            const message = document.createElement("p");
+            message.textContent = "Probier einen anderen Suchbegriff oder lösche die Suche.";
+            card.appendChild(heading);
+            card.appendChild(message);
+            searchResultsList.appendChild(card);
+            return;
+        }
+
+        for (const result of payload.results) {
+            const entry = result.entry;
+            const card = document.createElement("button");
+            card.type = "button";
+            card.className = "search-result-card";
+            card.addEventListener("click", async () => {
+                searchInput.value = "";
+                activeSearch = null;
+                clearSearchButton.classList.add("hidden");
+                await loadEntries(result.day, null, null);
+            });
+
+            const meta = document.createElement("span");
+            meta.className = "search-result-meta";
+            meta.textContent = `${formatDay(result.day)} · ${formatTime(entry.created_at)} · #${entry.id}`;
+
+            const content = document.createElement("span");
+            content.className = "search-result-content";
+            content.textContent = entry.content.length > 180 ? `${entry.content.slice(0, 180)}…` : entry.content;
+
+            card.appendChild(meta);
+            card.appendChild(content);
+
+            if (entry.tags.length > 0) {
+                const tags = document.createElement("span");
+                tags.className = "search-result-tags";
+                tags.textContent = entry.tags.map((tag) => `#${tag}`).join(" ");
+                card.appendChild(tags);
+            }
+
+            searchResultsList.appendChild(card);
+        }
+    }
+
+    async function loadSearchResults(search) {
+        const normalizedSearch = normalizeSearchInput(search);
+        if (!normalizedSearch) {
+            activeSearch = null;
+            clearSearchButton.classList.add("hidden");
+            showDailyView();
+            await loadEntries(currentDay, activeTag, null);
+            return;
+        }
+
+        try {
+            const payload = await fetchSearchResults(normalizedSearch);
+            renderSearchResults(payload);
+        } catch (error) {
+            showSearchView();
+            searchResultsList.innerHTML = '<article class="empty-card error"><h3>Suche konnte nicht geladen werden.</h3></article>';
+        }
+    }
+
     function renderEntries(payload) {
         currentDay = payload.day;
         previousDay = payload.previous_day;
@@ -557,6 +666,7 @@
         clearSearchButton.classList.toggle("hidden", !activeSearch);
         updateDayButtons();
         renderTagFilters(payload.available_tags);
+        showDailyView();
 
         const entries = payload.entries;
         entryCount.textContent = activeSearch
@@ -830,19 +940,21 @@
     searchInput.addEventListener("input", () => {
         window.clearTimeout(searchDebounceTimer);
         searchDebounceTimer = window.setTimeout(() => {
-            loadEntries(null, activeTag, normalizeSearchInput(searchInput.value) || null);
+            loadSearchResults(searchInput.value);
         }, 250);
     });
     searchInput.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
             event.preventDefault();
             window.clearTimeout(searchDebounceTimer);
-            loadEntries(null, activeTag, normalizeSearchInput(searchInput.value) || null);
+            loadSearchResults(searchInput.value);
         }
         if (event.key === "Escape") {
             searchInput.value = "";
             window.clearTimeout(searchDebounceTimer);
-            loadEntries(null, activeTag, null);
+            activeSearch = null;
+            clearSearchButton.classList.add("hidden");
+            loadEntries(currentDay, activeTag, null);
         }
     });
 
@@ -858,7 +970,15 @@
     clearSearchButton.addEventListener("click", () => {
         searchInput.value = "";
         window.clearTimeout(searchDebounceTimer);
-        loadEntries(null, activeTag, null);
+        activeSearch = null;
+        clearSearchButton.classList.add("hidden");
+        loadEntries(currentDay, activeTag, null);
+    });
+    closeSearchViewButton.addEventListener("click", () => {
+        searchInput.value = "";
+        activeSearch = null;
+        clearSearchButton.classList.add("hidden");
+        loadEntries(currentDay, activeTag, null);
     });
     composerBackdrop.addEventListener("click", (event) => {
         if (event.target === composerBackdrop) {
