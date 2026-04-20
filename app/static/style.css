@@ -515,8 +515,9 @@ input {
 
 .attachment-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(108px, 132px));
     gap: 8px;
+    justify-content: start;
 }
 
 .attachment-tile {
