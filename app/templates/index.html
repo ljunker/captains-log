@@ -47,6 +47,10 @@
             <span class="shortcut-pill"><kbd>Enter</kbd> Speichern</span>
             <span class="shortcut-pill"><kbd>Shift</kbd> + <kbd>Enter</kbd> Zeilenumbruch</span>
         </section>
+        <section class="search-strip" aria-label="Volltextsuche">
+            <input id="search-input" type="search" placeholder="Suche in Einträgen, Tags und Anhängen" autocomplete="off">
+            <button type="button" id="clear-search-button" class="secondary hidden">Suche löschen</button>
+        </section>
         <section id="tag-filter-strip" class="tag-filter-strip hidden">
             <div class="tag-filter-head">
                 <p class="eyebrow">Tags</p>
@@ -161,6 +165,8 @@
     const tagFilterList = document.getElementById("tag-filter-list");
     const clearTagFilterButton = document.getElementById("clear-tag-filter-button");
     const tagSuggestions = document.getElementById("tag-suggestions");
+    const searchInput = document.getElementById("search-input");
+    const clearSearchButton = document.getElementById("clear-search-button");
     const rootPath = {{ root_path|tojson }};
     const appTimezone = {{ app_timezone|tojson }};
     const serviceWorkerPath = {{ service_worker_path|tojson }};
@@ -169,6 +175,8 @@
     let previousDay = null;
     let nextDay = null;
     let activeTag = null;
+    let activeSearch = null;
+    let searchDebounceTimer = null;
     let latestTagSuggestionRequest = 0;
     let composerTags = [];
     let composerExistingAttachmentState = [];
@@ -508,18 +516,25 @@
             if (tag === activeTag) {
                 button.classList.add("active");
             }
-            button.addEventListener("click", () => loadEntries(currentDay, tag === activeTag ? null : tag));
+            button.addEventListener("click", () => loadEntries(currentDay, tag === activeTag ? null : tag, activeSearch));
             tagFilterList.appendChild(button);
         }
     }
 
-    async function fetchEntries(day = null, tag = activeTag) {
+    function normalizeSearchInput(value) {
+        return value.trim().split(/\s+/).filter(Boolean).join(" ");
+    }
+
+    async function fetchEntries(day = null, tag = activeTag, search = activeSearch) {
         const params = new URLSearchParams();
         if (day) {
             params.set("day", day);
         }
         if (tag) {
             params.set("tag", tag);
+        }
+        if (search) {
+            params.set("q", search);
         }
         const queryString = params.toString();
         const query = queryString ? `?${queryString}` : "";
@@ -535,11 +550,18 @@
         previousDay = payload.previous_day;
         nextDay = payload.next_day;
         activeTag = payload.active_tag;
+        activeSearch = payload.active_search;
+        if (document.activeElement !== searchInput) {
+            searchInput.value = activeSearch || "";
+        }
+        clearSearchButton.classList.toggle("hidden", !activeSearch);
         updateDayButtons();
         renderTagFilters(payload.available_tags);
 
         const entries = payload.entries;
-        entryCount.textContent = `${entries.length} ${entries.length === 1 ? "Eintrag" : "Einträge"}`;
+        entryCount.textContent = activeSearch
+            ? `${entries.length} ${entries.length === 1 ? "Treffer" : "Treffer"} für "${activeSearch}"`
+            : `${entries.length} ${entries.length === 1 ? "Eintrag" : "Einträge"}`;
         entriesList.innerHTML = "";
 
         if (entries.length === 0) {
@@ -554,7 +576,9 @@
             heading.textContent = "Für diesen Tag gibt es noch keinen Eintrag.";
 
             const message = document.createElement("p");
-            message.textContent = activeTag
+            message.textContent = activeSearch
+                ? `Für "${activeSearch}" gibt es hier keine Treffer.`
+                : activeTag
                 ? `Mit dem Tag #${activeTag} gibt es hier nichts.`
                 : "Drück einfach C und schreib direkt los.";
 
@@ -692,17 +716,17 @@
                 }
 
                 setStatus(`Eintrag #${entry.id} gelöscht.`);
-                await loadEntries(currentDay, activeTag);
+                await loadEntries(currentDay, activeTag, activeSearch);
             });
 
             entriesList.appendChild(fragment);
         }
     }
 
-    async function loadEntries(day = currentDay, tag = activeTag) {
-        const selectedDay = typeof day === "string" ? day : currentDay;
+    async function loadEntries(day = currentDay, tag = activeTag, search = activeSearch) {
+        const selectedDay = day === null ? null : (typeof day === "string" ? day : currentDay);
         try {
-            const payload = await fetchEntries(selectedDay, tag);
+            const payload = await fetchEntries(selectedDay, tag, search);
             renderEntries(payload);
         } catch (error) {
             entriesList.innerHTML = '<article class="empty-card error"><h3>Einträge konnten nicht geladen werden.</h3></article>';
@@ -749,7 +773,7 @@
         const targetDay = entryId ? currentDay : null;
         closeComposer();
         setStatus(`Eintrag #${savedEntry.id} gespeichert.`);
-        await loadEntries(targetDay, activeTag);
+        await loadEntries(targetDay, activeTag, activeSearch);
     }
 
     function isTypingContext() {
@@ -803,15 +827,39 @@
         renderPendingAttachments();
     });
 
-    refreshButton.addEventListener("click", () => loadEntries(currentDay, activeTag));
-    previousDayButton.addEventListener("click", () => loadEntries(previousDay, activeTag));
-    nextDayButton.addEventListener("click", () => loadEntries(nextDay, activeTag));
+    searchInput.addEventListener("input", () => {
+        window.clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = window.setTimeout(() => {
+            loadEntries(null, activeTag, normalizeSearchInput(searchInput.value) || null);
+        }, 250);
+    });
+    searchInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            window.clearTimeout(searchDebounceTimer);
+            loadEntries(null, activeTag, normalizeSearchInput(searchInput.value) || null);
+        }
+        if (event.key === "Escape") {
+            searchInput.value = "";
+            window.clearTimeout(searchDebounceTimer);
+            loadEntries(null, activeTag, null);
+        }
+    });
+
+    refreshButton.addEventListener("click", () => loadEntries(currentDay, activeTag, activeSearch));
+    previousDayButton.addEventListener("click", () => loadEntries(previousDay, activeTag, activeSearch));
+    nextDayButton.addEventListener("click", () => loadEntries(nextDay, activeTag, activeSearch));
     openComposerButton.addEventListener("click", () => openComposer());
     closeComposerButton.addEventListener("click", closeComposer);
     cancelButton.addEventListener("click", closeComposer);
     saveButton.addEventListener("click", saveEntry);
     addTagButton.addEventListener("click", addCurrentTag);
-    clearTagFilterButton.addEventListener("click", () => loadEntries(currentDay, null));
+    clearTagFilterButton.addEventListener("click", () => loadEntries(currentDay, null, activeSearch));
+    clearSearchButton.addEventListener("click", () => {
+        searchInput.value = "";
+        window.clearTimeout(searchDebounceTimer);
+        loadEntries(null, activeTag, null);
+    });
     composerBackdrop.addEventListener("click", (event) => {
         if (event.target === composerBackdrop) {
             closeComposer();

@@ -44,7 +44,7 @@
 - tags könnten auch in der suche berücksichtigt werden, um die relevanz der suchergebnisse zu erhöhen, z.B. könnte ein eintrag mit dem tag "python" höher in den suchergebnissen erscheinen, wenn nach "python" gesucht wird.
 - auch so tags wie "privat" oder "arbeit" könnten nützlich sein, um einträge zu kategorisieren und zu filtern
 
-### volltextsuche
+### volltextsuche ERLEDIGT
 - einträge sollten per volltextsuche durchsuchbar sein, nicht nur nach tag oder tag
 - sqlite fts5 könnte dafür genutzt werden, damit die suche auch bei vielen einträgen schnell bleibt
 - die suche sollte sowohl content als auch tags berücksichtigen

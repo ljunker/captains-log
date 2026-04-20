@@ -405,6 +405,24 @@ def _matches_tag(entry: Entry, selected_tag: str | None) -> bool:
     return selected_tag in _tag_names(entry)
 
 
+def _matches_search(entry: Entry, search_query: str | None) -> bool:
+    if search_query is None:
+        return True
+
+    terms = [term for term in search_query.casefold().split() if term]
+    if not terms:
+        return True
+
+    searchable_text = " ".join(
+        [
+            entry.content,
+            " ".join(_tag_names(entry)),
+            " ".join(attachment.original_filename for attachment in entry.attachments),
+        ]
+    ).casefold()
+    return all(term in searchable_text for term in terms)
+
+
 def _get_or_create_tags(tag_names: list[str], db: Session) -> list[Tag]:
     if not tag_names:
         return []
@@ -577,6 +595,7 @@ def suggest_tags(
 def list_entries(
     day: date | None = Query(default=None, description="Optionales Tagesfilter im Format YYYY-MM-DD"),
     tag: str | None = Query(default=None, description="Optionaler Tag-Filter"),
+    q: str | None = Query(default=None, description="Optionaler Volltext-Suchfilter"),
     db: Session = Depends(get_db),
 ) -> EntryListResponse:
     all_entries = _get_all_entries(db)
@@ -584,10 +603,15 @@ def list_entries(
         selected_tag = normalize_tag_name(tag) if tag is not None and tag.strip() else None
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    matching_entries = [entry for entry in all_entries if _matches_tag(entry, selected_tag)]
+    selected_search = q.strip() if q is not None and q.strip() else None
+    matching_entries = [
+        entry
+        for entry in all_entries
+        if _matches_tag(entry, selected_tag) and _matches_search(entry, selected_search)
+    ]
     available_days = sorted({local_date(entry.created_at) for entry in matching_entries}, reverse=True)
     selected_day = day if day is not None else (available_days[0] if available_days else datetime.now(APP_TIMEZONE).date())
-    day_entries = [entry for entry in all_entries if local_date(entry.created_at) == selected_day]
+    day_entries = [entry for entry in all_entries if local_date(entry.created_at) == selected_day and _matches_search(entry, selected_search)]
     entries = [entry for entry in day_entries if _matches_tag(entry, selected_tag)]
     available_tags = sorted({tag_name for entry in day_entries for tag_name in _tag_names(entry)})
 
@@ -599,6 +623,7 @@ def list_entries(
         previous_day=previous_day,
         next_day=next_day,
         active_tag=selected_tag,
+        active_search=selected_search,
         available_tags=available_tags,
         entries=[_serialize_entry(entry) for entry in entries],
     )

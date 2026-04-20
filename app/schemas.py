@@ -109,5 +109,6 @@ class EntryListResponse(BaseModel):
     previous_day: date | None
     next_day: date | None
     active_tag: str | None
+    active_search: str | None
     available_tags: list[str]
     entries: list[EntryRead]

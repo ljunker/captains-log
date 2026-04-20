@@ -156,6 +156,20 @@ h1 {
     padding: 0 0 12px;
 }
 
+.search-strip {
+    display: flex;
+    gap: 8px;
+    padding: 0 0 12px;
+}
+
+.search-strip input {
+    flex: 1;
+}
+
+.search-strip button {
+    white-space: nowrap;
+}
+
 .shortcut-pill {
     display: inline-flex;
     align-items: center;
@@ -672,6 +686,15 @@ input {
 
     .shortcut-strip {
         display: none;
+    }
+
+    .search-strip {
+        gap: 6px;
+    }
+
+    .search-strip button {
+        padding-inline: 8px;
+        font-size: 0.82rem;
     }
 
     .toolbar-docs-link {

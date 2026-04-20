@@ -108,14 +108,36 @@ def test_entry_crud_flow(tmp_path: Path) -> None:
         assert listed["previous_day"] == yesterday.date().isoformat()
         assert listed["next_day"] is None
         assert listed["active_tag"] is None
+        assert listed["active_search"] is None
         assert listed["available_tags"] == ["arbeit", "python"]
         assert len(listed["entries"]) == 1
         assert [attachment["kind"] for attachment in listed["entries"][0]["attachments"]] == ["image", "image", "audio"]
+
+        content_search_response = client.get("/api/entries?q=erster", headers=headers)
+        assert content_search_response.status_code == 200
+        content_search_payload = content_search_response.json()
+        assert content_search_payload["active_search"] == "erster"
+        assert len(content_search_payload["entries"]) == 1
+        assert content_search_payload["entries"][0]["id"] == entry_id
+
+        tag_search_response = client.get("/api/entries?q=python", headers=headers)
+        assert tag_search_response.status_code == 200
+        assert tag_search_response.json()["entries"][0]["tags"] == ["arbeit", "python"]
+
+        attachment_search_response = client.get("/api/entries?q=memo", headers=headers)
+        assert attachment_search_response.status_code == 200
+        assert attachment_search_response.json()["entries"][0]["id"] == entry_id
+
+        missing_search_response = client.get("/api/entries?q=kommt-nicht-vor", headers=headers)
+        assert missing_search_response.status_code == 200
+        assert missing_search_response.json()["active_search"] == "kommt-nicht-vor"
+        assert missing_search_response.json()["entries"] == []
 
         filtered_response = client.get("/api/entries?tag=python", headers=headers)
         assert filtered_response.status_code == 200
         filtered_payload = filtered_response.json()
         assert filtered_payload["active_tag"] == "python"
+        assert filtered_payload["active_search"] is None
         assert filtered_payload["available_tags"] == ["arbeit", "python"]
         assert len(filtered_payload["entries"]) == 1
         assert filtered_payload["entries"][0]["tags"] == ["arbeit", "python"]
@@ -173,6 +195,7 @@ def test_entry_crud_flow(tmp_path: Path) -> None:
         previous_day_payload = previous_day_response.json()
         assert previous_day_payload["day"] == yesterday.date().isoformat()
         assert previous_day_payload["next_day"] == today.date().isoformat()
+        assert previous_day_payload["active_search"] is None
         assert previous_day_payload["available_tags"] == []
         assert len(previous_day_payload["entries"]) == 1
 
@@ -233,6 +256,7 @@ def test_existing_unversioned_database_gets_version_table(tmp_path: Path) -> Non
         payload = response.json()
         assert len(payload["entries"]) == 1
         assert payload["entries"][0]["content"] == "Altbestand"
+        assert payload["active_search"] is None
 
     sqlite_connection = sqlite3.connect(sqlite_path)
     try:
