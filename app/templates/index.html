@@ -535,6 +535,63 @@
         return value.trim().split(/\s+/).filter(Boolean).join(" ");
     }
 
+    function searchTerms(query) {
+        return normalizeSearchInput(query).toLowerCase().split(" ").filter(Boolean);
+    }
+
+    function escapeRegExp(value) {
+        return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+
+    function buildSearchSnippet(text, query, maxLength = 180) {
+        if (text.length <= maxLength) {
+            return text;
+        }
+
+        const terms = searchTerms(query);
+        const lowerText = text.toLowerCase();
+        const firstHit = terms
+            .map((term) => lowerText.indexOf(term))
+            .filter((position) => position >= 0)
+            .sort((left, right) => left - right)[0];
+
+        if (firstHit === undefined) {
+            return `${text.slice(0, maxLength).trimEnd()}…`;
+        }
+
+        const snippetStart = Math.max(0, firstHit - 42);
+        const snippetEnd = Math.min(text.length, snippetStart + maxLength);
+        const prefix = snippetStart > 0 ? "…" : "";
+        const suffix = snippetEnd < text.length ? "…" : "";
+        return `${prefix}${text.slice(snippetStart, snippetEnd).trim()}${suffix}`;
+    }
+
+    function appendHighlightedText(target, text, query) {
+        const snippet = buildSearchSnippet(text, query);
+        const terms = searchTerms(query);
+        if (terms.length === 0) {
+            target.textContent = snippet;
+            return;
+        }
+
+        const pattern = new RegExp(`(${terms.map(escapeRegExp).join("|")})`, "gi");
+        let lastIndex = 0;
+        for (const match of snippet.matchAll(pattern)) {
+            const matchIndex = match.index ?? 0;
+            if (matchIndex > lastIndex) {
+                target.append(document.createTextNode(snippet.slice(lastIndex, matchIndex)));
+            }
+            const mark = document.createElement("mark");
+            mark.className = "search-highlight";
+            mark.textContent = match[0];
+            target.append(mark);
+            lastIndex = matchIndex + match[0].length;
+        }
+        if (lastIndex < snippet.length) {
+            target.append(document.createTextNode(snippet.slice(lastIndex)));
+        }
+    }
+
     async function fetchEntries(day = null, tag = activeTag, search = activeSearch) {
         const params = new URLSearchParams();
         if (day) {
@@ -619,7 +676,7 @@
 
             const content = document.createElement("span");
             content.className = "search-result-content";
-            content.textContent = entry.content.length > 180 ? `${entry.content.slice(0, 180)}…` : entry.content;
+            appendHighlightedText(content, entry.content, payload.query);
 
             card.appendChild(meta);
             card.appendChild(content);

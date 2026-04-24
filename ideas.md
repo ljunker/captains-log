@@ -98,3 +98,13 @@
 - so ließe sich später nachvollziehen, was an einem eintrag geändert wurde
 - technisch könnte es dafür eine entry_revisions tabelle geben
 - in der ui könnte man pro eintrag eine kleine history-ansicht öffnen
+
+### anhang-aufraeumen
+- ein kleiner wartungsmodus oder admin-job könnte prüfen, ob dateien im upload-ordner keinen db-eintrag mehr haben oder db-einträge auf fehlende dateien zeigen
+- das wäre besonders nach deploys, migrations oder manuellen dateioperationen nützlich
+- praktisch wären ein dry-run und ein echter cleanup-modus
+
+### offline-create-queue
+- der pwa-modus könnte neue einträge offline lokal zwischenspeichern und später automatisch synchronisieren
+- dabei müsste sichtbar sein, welche einträge noch ausstehen und ob konflikte aufgetreten sind
+- das wäre der sinnvolle nächste schritt nach dem bisherigen read-only-offline-cache
