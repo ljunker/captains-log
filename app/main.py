@@ -622,6 +622,7 @@ def list_entries(
         day=selected_day,
         previous_day=previous_day,
         next_day=next_day,
+        available_days=available_days,
         active_tag=selected_tag,
         active_search=selected_search,
         available_tags=available_tags,

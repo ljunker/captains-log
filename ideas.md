@@ -63,7 +63,7 @@
 - später könnte daraus auch eine web-push-benachrichtigung werden
 - erinnerungen sollten zeitlich konfigurierbar sein, z.B. werktags um 18 uhr
 
-### kalenderansicht
+### kalenderansicht ERLEDIGT
 - zusätzlich zur tagesansicht wäre eine kalenderansicht sinnvoll, um schnell zu sehen, an welchen tagen schon einträge existieren
 - tage mit vielen einträgen könnten farblich stärker hervorgehoben werden
 - ein klick auf einen tag sollte direkt in die bestehende tagesansicht springen

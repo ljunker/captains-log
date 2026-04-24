@@ -107,6 +107,7 @@ def test_entry_crud_flow(tmp_path: Path) -> None:
         assert listed["day"] == custom_created_at.date().isoformat()
         assert listed["previous_day"] == yesterday.date().isoformat()
         assert listed["next_day"] is None
+        assert listed["available_days"] == [custom_created_at.date().isoformat(), yesterday.date().isoformat()]
         assert listed["active_tag"] is None
         assert listed["active_search"] is None
         assert listed["available_tags"] == ["arbeit", "python"]
@@ -158,6 +159,7 @@ def test_entry_crud_flow(tmp_path: Path) -> None:
         filtered_payload = filtered_response.json()
         assert filtered_payload["active_tag"] == "python"
         assert filtered_payload["active_search"] is None
+        assert filtered_payload["available_days"] == [custom_created_at.date().isoformat()]
         assert filtered_payload["available_tags"] == ["arbeit", "python"]
         assert len(filtered_payload["entries"]) == 1
         assert filtered_payload["entries"][0]["tags"] == ["arbeit", "python"]
@@ -215,6 +217,7 @@ def test_entry_crud_flow(tmp_path: Path) -> None:
         previous_day_payload = previous_day_response.json()
         assert previous_day_payload["day"] == yesterday.date().isoformat()
         assert previous_day_payload["next_day"] == today.date().isoformat()
+        assert previous_day_payload["available_days"] == [custom_created_at.date().isoformat(), yesterday.date().isoformat()]
         assert previous_day_payload["active_search"] is None
         assert previous_day_payload["available_tags"] == []
         assert len(previous_day_payload["entries"]) == 1
@@ -276,6 +279,7 @@ def test_existing_unversioned_database_gets_version_table(tmp_path: Path) -> Non
         payload = response.json()
         assert len(payload["entries"]) == 1
         assert payload["entries"][0]["content"] == "Altbestand"
+        assert payload["available_days"] == ["2026-04-10"]
         assert payload["active_search"] is None
 
     sqlite_connection = sqlite3.connect(sqlite_path)

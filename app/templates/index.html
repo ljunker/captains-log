@@ -51,6 +51,29 @@
             <input id="search-input" type="search" placeholder="Suche in Einträgen, Tags und Anhängen" autocomplete="off">
             <button type="button" id="clear-search-button" class="secondary hidden">Suche löschen</button>
         </section>
+        <section id="calendar-panel" class="calendar-panel">
+            <div class="calendar-panel-head">
+                <p class="eyebrow">Kalender</p>
+                <button type="button" id="toggle-calendar-button" class="secondary">Aufklappen</button>
+            </div>
+            <div id="calendar-body" class="calendar-body hidden">
+                <div class="calendar-toolbar">
+                    <button type="button" id="calendar-previous-month-button" class="secondary" aria-label="Vorheriger Monat">←</button>
+                    <p id="calendar-month-label" class="calendar-month-label"></p>
+                    <button type="button" id="calendar-next-month-button" class="secondary" aria-label="Nächster Monat">→</button>
+                </div>
+                <div class="calendar-weekdays" aria-hidden="true">
+                    <span>Mo</span>
+                    <span>Di</span>
+                    <span>Mi</span>
+                    <span>Do</span>
+                    <span>Fr</span>
+                    <span>Sa</span>
+                    <span>So</span>
+                </div>
+                <div id="calendar-grid" class="calendar-grid"></div>
+            </div>
+        </section>
         <section id="tag-filter-strip" class="tag-filter-strip hidden">
             <div class="tag-filter-head">
                 <p class="eyebrow">Tags</p>
@@ -174,6 +197,13 @@
     const tagSuggestions = document.getElementById("tag-suggestions");
     const searchInput = document.getElementById("search-input");
     const clearSearchButton = document.getElementById("clear-search-button");
+    const calendarPanel = document.getElementById("calendar-panel");
+    const calendarBody = document.getElementById("calendar-body");
+    const toggleCalendarButton = document.getElementById("toggle-calendar-button");
+    const calendarPreviousMonthButton = document.getElementById("calendar-previous-month-button");
+    const calendarNextMonthButton = document.getElementById("calendar-next-month-button");
+    const calendarMonthLabel = document.getElementById("calendar-month-label");
+    const calendarGrid = document.getElementById("calendar-grid");
     const searchResultsView = document.getElementById("search-results-view");
     const searchResultsList = document.getElementById("search-results-list");
     const closeSearchViewButton = document.getElementById("close-search-view-button");
@@ -184,8 +214,11 @@
     let currentDay = null;
     let previousDay = null;
     let nextDay = null;
+    let availableDays = [];
     let activeTag = null;
     let activeSearch = null;
+    let calendarExpanded = false;
+    let calendarMonth = null;
     let searchDebounceTimer = null;
     let latestTagSuggestionRequest = 0;
     let composerTags = [];
@@ -298,6 +331,75 @@
         previousDayButton.disabled = !previousDay;
         nextDayButton.disabled = !nextDay;
         dayLabel.textContent = currentDay ? formatDay(currentDay) : "Dein Logbuch";
+    }
+
+    function toMonthKey(day) {
+        return day ? day.slice(0, 7) : null;
+    }
+
+    function addMonths(monthKey, offset) {
+        const [year, month] = monthKey.split("-").map(Number);
+        const date = new Date(Date.UTC(year, month - 1, 1, 12, 0, 0));
+        date.setUTCMonth(date.getUTCMonth() + offset);
+        return date.toISOString().slice(0, 7);
+    }
+
+    function daysInMonth(monthKey) {
+        const [year, month] = monthKey.split("-").map(Number);
+        return new Date(Date.UTC(year, month, 0, 12, 0, 0)).getUTCDate();
+    }
+
+    function monthLabel(monthKey) {
+        return new Intl.DateTimeFormat("de-DE", {
+            month: "long",
+            year: "numeric",
+            timeZone: appTimezone,
+        }).format(new Date(`${monthKey}-01T12:00:00Z`));
+    }
+
+    function renderCalendar() {
+        calendarGrid.innerHTML = "";
+        if (!calendarMonth) {
+            calendarMonthLabel.textContent = "";
+            return;
+        }
+
+        calendarMonthLabel.textContent = monthLabel(calendarMonth);
+        const firstDay = new Date(`${calendarMonth}-01T12:00:00Z`);
+        const offset = (firstDay.getUTCDay() + 6) % 7;
+        const totalDays = daysInMonth(calendarMonth);
+        const availableDaySet = new Set(availableDays);
+
+        for (let index = 0; index < offset; index += 1) {
+            const filler = document.createElement("span");
+            filler.className = "calendar-cell calendar-cell-empty";
+            calendarGrid.appendChild(filler);
+        }
+
+        for (let dayNumber = 1; dayNumber <= totalDays; dayNumber += 1) {
+            const dayKey = `${calendarMonth}-${String(dayNumber).padStart(2, "0")}`;
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "calendar-cell calendar-day";
+            button.textContent = String(dayNumber);
+            if (dayKey === currentDay) {
+                button.classList.add("active");
+            }
+            if (availableDaySet.has(dayKey)) {
+                button.classList.add("has-entry");
+            }
+            button.addEventListener("click", () => loadEntries(dayKey, activeTag, null));
+            calendarGrid.appendChild(button);
+        }
+    }
+
+    function syncCalendarState() {
+        calendarBody.classList.toggle("hidden", !calendarExpanded);
+        toggleCalendarButton.textContent = calendarExpanded ? "Zuklappen" : "Aufklappen";
+        if (!calendarMonth) {
+            calendarMonth = toMonthKey(currentDay);
+        }
+        renderCalendar();
     }
 
     function parseTagsInput(value) {
@@ -623,12 +725,14 @@
 
     function showDailyView() {
         searchResultsView.classList.add("hidden");
+        calendarPanel.classList.remove("hidden");
         entriesList.classList.remove("hidden");
         tagFilterStrip.classList.toggle("hidden", tagFilterList.children.length === 0);
     }
 
     function showSearchView() {
         searchResultsView.classList.remove("hidden");
+        calendarPanel.classList.add("hidden");
         entriesList.classList.add("hidden");
         tagFilterStrip.classList.add("hidden");
     }
@@ -715,14 +819,19 @@
         currentDay = payload.day;
         previousDay = payload.previous_day;
         nextDay = payload.next_day;
+        availableDays = payload.available_days;
         activeTag = payload.active_tag;
         activeSearch = payload.active_search;
+        if (!calendarMonth || toMonthKey(currentDay) !== calendarMonth) {
+            calendarMonth = toMonthKey(currentDay);
+        }
         if (document.activeElement !== searchInput) {
             searchInput.value = activeSearch || "";
         }
         clearSearchButton.classList.toggle("hidden", !activeSearch);
         updateDayButtons();
         renderTagFilters(payload.available_tags);
+        syncCalendarState();
         showDailyView();
 
         const entries = payload.entries;
@@ -1030,6 +1139,24 @@
         activeSearch = null;
         clearSearchButton.classList.add("hidden");
         loadEntries(currentDay, activeTag, null);
+    });
+    toggleCalendarButton.addEventListener("click", () => {
+        calendarExpanded = !calendarExpanded;
+        syncCalendarState();
+    });
+    calendarPreviousMonthButton.addEventListener("click", () => {
+        if (!calendarMonth) {
+            return;
+        }
+        calendarMonth = addMonths(calendarMonth, -1);
+        renderCalendar();
+    });
+    calendarNextMonthButton.addEventListener("click", () => {
+        if (!calendarMonth) {
+            return;
+        }
+        calendarMonth = addMonths(calendarMonth, 1);
+        renderCalendar();
     });
     closeSearchViewButton.addEventListener("click", () => {
         searchInput.value = "";
