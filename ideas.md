@@ -5,10 +5,35 @@
 ### data management
 - [datenbank versionierung `[ERLEDIGT]`](#datenbank-versionierung)
 - [datenbank backup `[ERLEDIGT]`](#datenbank-backup)
+- [anhang-storage konsistenz](#anhang-storage-konsistenz)
+- [db vacuum und optimize](#db-vacuum-und-optimize)
+- [integrity checks](#integrity-checks)
+- [soft delete und papierkorb](#soft-delete-und-papierkorb)
+- [retention-regeln](#retention-regeln)
+- [anhaenge deduplizieren](#anhaenge-deduplizieren)
+- [content hashing](#content-hashing)
+- [verschlüsselung at rest](#verschluesselung-at-rest)
+- [schema health dashboard](#schema-health-dashboard)
+- [bulk repair tools](#bulk-repair-tools)
+- [import preview](#import-preview)
+- [export snapshots](#export-snapshots)
+- [anhang-metadaten extraktion](#anhang-metadaten-extraktion)
+- [quota und limits](#quota-und-limits)
+- [mehrstufige backup-policy](#mehrstufige-backup-policy)
 
 ### deployment
 - [version von docker hub ziehen `[ERLEDIGT]`](#version-von-docker-hub-ziehen)
 - [automatisches git tag mit patch minor major version `[ERLEDIGT]`](#automatisches-git-tag)
+- [healthcheck-aware deploy](#healthcheck-aware-deploy)
+- [rollback auf letzte funktionierende version](#rollback-auf-letzte-funktionierende-version)
+- [deploy preflight checks](#deploy-preflight-checks)
+- [staging deployment](#staging-deployment)
+- [zero-downtime deployment](#zero-downtime-deployment)
+- [release notes aus git tags](#release-notes-aus-git-tags)
+- [deploy lock](#deploy-lock)
+- [env validation beim deploy](#env-validation-beim-deploy)
+- [post-deploy smoke tests](#post-deploy-smoke-tests)
+- [backup vor deploy](#backup-vor-deploy)
 
 ### usability
 - [tags `[ERLEDIGT]`](#tags)
@@ -46,6 +71,96 @@
 - backups sollten regelmäßig getestet werden, um sicherzustellen, dass sie im notfall wiederhergestellt werden können
 - alles über cron jobs automatisieren, damit es keine manuelle arbeit erfordert und regelmäßig durchgeführt wird. die cron jobs müssen auf debian 13 laufen
 
+<a id="anhang-storage-konsistenz"></a>
+### anhang-storage konsistenz
+- es sollte prüfbar sein, ob jeder anhang in der datenbank auch wirklich noch als datei auf dem dateisystem existiert
+- umgekehrt sollten auch dateien erkannt werden, die keinen db-eintrag mehr haben
+- ideal wäre ein dry-run und ein reparaturmodus für solche abweichungen
+
+<a id="db-vacuum-und-optimize"></a>
+### db vacuum und optimize
+- sqlite sollte regelmäßig optimiert werden, damit dateileichen und freier speicher sauber aufgeräumt werden
+- dafür wären vacuum, analyze und pragma optimize sinnvolle bausteine
+- das könnte als manuelles script oder periodischer wartungsjob laufen
+
+<a id="integrity-checks"></a>
+### integrity checks
+- zusätzlich zu backups wäre ein eigener gesundheitscheck für die datenbank sinnvoll
+- dabei könnten pragma integrity_check, foreign key checks und dateisystem-prüfungen für uploads kombiniert werden
+- das ergebnis könnte als kleiner report oder cron-mail ausgegeben werden
+
+<a id="soft-delete-und-papierkorb"></a>
+### soft delete und papierkorb
+- statt einträge sofort endgültig zu löschen, könnte man sie zuerst in einen papierkorb verschieben
+- damit wären versehentliche löschungen einfacher rückgängig zu machen
+- später könnte ein cleanup-job solche einträge nach einer frist wirklich entfernen
+
+<a id="retention-regeln"></a>
+### retention-regeln
+- für revisionsdaten, temporäre dateien oder alte artefakte könnten aufbewahrungsregeln definiert werden
+- so wächst die instanz nicht unbegrenzt weiter
+- die regeln sollten konfigurierbar sein, z.b. nach alter oder gesamtgröße
+
+<a id="anhaenge-deduplizieren"></a>
+### anhaenge deduplizieren
+- identische dateien könnten per hash erkannt und nur einmal gespeichert werden
+- mehrere einträge könnten dann auf denselben blob verweisen
+- das spart speicher, vor allem bei mehrfach hochgeladenen bildern oder audios
+
+<a id="content-hashing"></a>
+### content hashing
+- auch für einträge selbst könnte ein hash nützlich sein, um doppelte imports oder redundante daten zu erkennen
+- das wäre besonders hilfreich für export/import und repair-tools
+- die hashes könnten zusätzlich für integritätsprüfungen verwendet werden
+
+<a id="verschluesselung-at-rest"></a>
+### verschlüsselung at rest
+- sensible daten könnten zusätzlich im ruhenden zustand geschützt werden, nicht nur im backup
+- technisch könnte das z.b. über sqlite-verschlüsselung oder hostseitige verschlüsselung gelöst werden
+- wichtig wäre dabei ein sauberer schlüssel- und restore-prozess
+
+<a id="schema-health-dashboard"></a>
+### schema health dashboard
+- eine kleine admin-übersicht könnte db-version, eintragsanzahl, anhangszahl, fehlende dateien und den status letzter checks zeigen
+- das wäre praktisch, um auf einen blick zu sehen, ob die instanz gesund ist
+- langfristig könnte man dort auch backup- und wartungsstatus einblenden
+
+<a id="bulk-repair-tools"></a>
+### bulk repair tools
+- für wiederkehrende reparaturen wären kleine scripts sinnvoll, z.b. thumbnails neu bauen, tags normalisieren oder kaputte referenzen bereinigen
+- das sollte bewusst getrennt von der normalen app-logik laufen
+- ideal wären dry-run und klare zusammenfassungen nach dem lauf
+
+<a id="import-preview"></a>
+### import preview
+- vor einem import wäre eine analyse sinnvoll, die neue, doppelte und konfliktverdächtige daten anzeigt
+- dadurch würde man nicht blind alles einspielen
+- so ließen sich imports kontrollierter und sicherer durchführen
+
+<a id="export-snapshots"></a>
+### export snapshots
+- exports könnten mit metadaten und checksummen als richtige snapshots abgelegt werden
+- damit ließe sich besser nachvollziehen, wann welcher export entstanden ist
+- so etwas wäre auch nützlich als ergänzung zu backups
+
+<a id="anhang-metadaten-extraktion"></a>
+### anhang-metadaten extraktion
+- für bilder und audio könnten zusätzliche metadaten wie exif, aufnahmedatum, dauer oder abmessungen gespeichert werden
+- das wäre später hilfreich für suche, statistik und bessere darstellung
+- bei bildern müsste dabei auf datenschutz und optionale bereinigung geachtet werden
+
+<a id="quota-und-limits"></a>
+### quota und limits
+- es könnte sinnvoll sein, gesamtgrößen oder anzahlgrenzen für anhänge zu überwachen
+- so ließe sich vermeiden, dass das system unbemerkt vollläuft
+- warnungen oder harte limits wären beides denkbar
+
+<a id="mehrstufige-backup-policy"></a>
+### mehrstufige backup-policy
+- zusätzlich zu einem einzelnen backup-ziel könnte man lokale, externe und verifizierte backup-stufen trennen
+- so wäre klarer, welche sicherung nur lokal liegt und welche wirklich extern abgesichert ist
+- das wäre vor allem für produktivere nutzung sinnvoll
+
 ## deployment
 
 <a id="version-von-docker-hub-ziehen"></a>
@@ -61,6 +176,66 @@
 - ich will ein kleines bash script, was mir automatisch ein git tag erstellt
 - ich will "./createtag minor" eingeben, und das script soll sich den letzten git tag holen, die version ordetlich hoch setzen (also von v1.0.1 -> "./createtag minor" -> v1.1.0) und dann den neuen tag erstellen
 - das script könnte auch die option haben, die version manuell anzugeben, z.B. "./createtag v1.2.0", um einen bestimmten tag zu erstellen
+
+<a id="healthcheck-aware-deploy"></a>
+### healthcheck-aware deploy
+- nach einem deploy sollte automatisch geprüft werden, ob die app wirklich gesund hochgekommen ist
+- dafür könnte `dockerhub-up` auf `/health` warten und bei fehlschlag den deploy als fehler markieren
+- optional könnte erst nach erfolgreichem healthcheck die neue version als aktiv gelten
+
+<a id="rollback-auf-letzte-funktionierende-version"></a>
+### rollback auf letzte funktionierende version
+- wenn ein deploy fehlschlägt, sollte ein schneller rollback auf die zuletzt funktionierende version möglich sein
+- dafür könnte die vorherige image-version oder image-id automatisch protokolliert werden
+- ideal wäre ein kleines script wie `./dockerhub-up --rollback`
+
+<a id="deploy-preflight-checks"></a>
+### deploy preflight checks
+- vor dem eigentlichen deploy könnten grundlegende checks laufen, z.b. ob docker erreichbar ist, genug speicherplatz da ist und das volume gemountet ist
+- so würden banale fehler früher auffallen
+- das könnte auch nginx- und port-kollisionen mitprüfen
+
+<a id="staging-deployment"></a>
+### staging deployment
+- zusätzlich zur produktiven compose-datei könnte es einen staging-flow geben
+- damit ließen sich neue builds auf einem zweiten port oder einer zweiten subdomain testen, bevor sie live gehen
+- sinnvoll wäre auch eine getrennte datenbank oder ein frisches staging-volume
+
+<a id="zero-downtime-deployment"></a>
+### zero-downtime deployment
+- langfristig könnte das deployment so umgebaut werden, dass kurze ausfälle beim update vermieden werden
+- dafür bräuchte es vermutlich zwei app-instanzen und einen proxy-switch
+- das ist aufwendiger, aber für produktivere nutzung interessant
+
+<a id="release-notes-aus-git-tags"></a>
+### release notes aus git tags
+- aus commits zwischen zwei tags könnten automatisch kurze release notes erzeugt werden
+- das wäre praktisch, um nach einem deploy direkt zu sehen, was sich geändert hat
+- diese infos könnten in eine datei, ins terminal oder in eine kleine deploy-historie geschrieben werden
+
+<a id="deploy-lock"></a>
+### deploy lock
+- es wäre sinnvoll, parallele deploys zu verhindern
+- ein lockfile oder ähnlicher mechanismus könnte verhindern, dass zwei deploy-jobs gleichzeitig laufen
+- das reduziert race conditions bei pull, up und migrationsschritten
+
+<a id="env-validation-beim-deploy"></a>
+### env validation beim deploy
+- vor dem start könnten pflicht-umgebungsvariablen und wichtige pfade geprüft werden
+- dazu gehören z.b. api-key, uploads-pfad, root-path oder backup-passphrasen-dateien
+- so werden falsch konfigurierte deploys früher abgefangen
+
+<a id="post-deploy-smoke-tests"></a>
+### post-deploy smoke tests
+- nach einem erfolgreichen start könnten kleine smoke tests laufen, z.b. `/health`, startseite, api und vielleicht ein read-only eintragsaufruf
+- das wäre eine gute ergänzung zum einfachen healthcheck
+- bei fehlschlag könnte direkt gewarnt oder automatisch zurückgerollt werden
+
+<a id="backup-vor-deploy"></a>
+### backup vor deploy
+- vor einem produktiven deploy könnte automatisch ein datenbank-backup angestoßen werden
+- das wäre besonders wichtig, wenn migrations- oder reparaturschritte beteiligt sind
+- der deploy könnte abbrechen, wenn das backup nicht erfolgreich erstellt wurde
 
 ## usability
 
