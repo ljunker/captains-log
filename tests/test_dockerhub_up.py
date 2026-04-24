@@ -89,3 +89,37 @@ def test_deploy_exports_repository_and_version(monkeypatch) -> None:
     assert calls[1][0] == ["docker", "compose", "up", "-d", "app"]
     assert calls[0][1]["DOCKER_IMAGE_REPOSITORY"] == "kryptikker/captains-log"
     assert calls[0][1]["DOCKER_IMAGE_VERSION"] == "1.2.0"
+
+
+def test_main_skips_deploy_when_container_already_uses_requested_image(monkeypatch) -> None:
+    deploy_calls: list[tuple[str, str, bool]] = []
+
+    monkeypatch.setattr(dockerhub_up, "fetch_latest_dockerhub_version", lambda repository: "1.2.0")
+    monkeypatch.setattr(dockerhub_up, "get_running_image_ref", lambda: "kryptikker/captains-log:1.2.0")
+    monkeypatch.setattr(
+        dockerhub_up,
+        "deploy",
+        lambda repository, version, dry_run: deploy_calls.append((repository, version, dry_run)),
+    )
+
+    exit_code = dockerhub_up.main(["--version", "1.2.0"])
+
+    assert exit_code == 0
+    assert deploy_calls == []
+
+
+def test_main_deploys_when_container_uses_different_image(monkeypatch) -> None:
+    deploy_calls: list[tuple[str, str, bool]] = []
+
+    monkeypatch.setattr(dockerhub_up, "fetch_latest_dockerhub_version", lambda repository: "1.2.0")
+    monkeypatch.setattr(dockerhub_up, "get_running_image_ref", lambda: "kryptikker/captains-log:1.1.0")
+    monkeypatch.setattr(
+        dockerhub_up,
+        "deploy",
+        lambda repository, version, dry_run: deploy_calls.append((repository, version, dry_run)),
+    )
+
+    exit_code = dockerhub_up.main(["--version", "1.2.0"])
+
+    assert exit_code == 0
+    assert deploy_calls == [("kryptikker/captains-log", "1.2.0", False)]

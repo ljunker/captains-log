@@ -16,6 +16,7 @@ from urllib.request import urlopen
 DEFAULT_REPOSITORY = "kryptikker/captains-log"
 DEFAULT_VERSION = "latest"
 DEFAULT_VERSION_FILE = Path(__file__).resolve().with_name("version.txt")
+DEFAULT_CONTAINER_NAME = "captains-log-app"
 SEMVER_TAG_RE = re.compile(r"^v?(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)$")
 
 
@@ -159,6 +160,24 @@ def build_compose_env(repository: str, version: str) -> dict[str, str]:
     return environment
 
 
+def target_image_ref(repository: str, version: str) -> str:
+    return f"{repository}:{version}"
+
+
+def get_running_image_ref(container_name: str = DEFAULT_CONTAINER_NAME) -> str | None:
+    result = subprocess.run(
+        ["docker", "inspect", "--format", "{{.Config.Image}}", container_name],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+
+    image_ref = result.stdout.strip()
+    return image_ref or None
+
+
 def run_command(command: list[str], environment: dict[str, str], dry_run: bool) -> None:
     print("$", " ".join(command))
     if dry_run:
@@ -206,6 +225,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Warning: {latest_error}", file=sys.stderr)
 
     if args.check_only:
+        return 0
+
+    current_image = get_running_image_ref()
+    requested_image = target_image_ref(repository, configured_version)
+    if current_image == requested_image:
+        print(f"Container already runs {requested_image}; skipping docker compose up.")
         return 0
 
     deploy(repository, configured_version, dry_run=args.dry_run)
