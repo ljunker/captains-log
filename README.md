@@ -192,7 +192,7 @@ API_KEY=dein-schluessel HOST_PORT=8010 ./dockerhub-up
 
 Die SQLite-Datei liegt im benannten Volume `captains_log_data`.
 
-`./dockerhub-up` startet `docker compose up` nur dann, wenn der laufende Container nicht bereits genau den angeforderten Image-Tag verwendet.
+`./dockerhub-up` fuehrt immer zuerst `docker compose pull` aus und startet `docker compose up` nur dann, wenn sich die tatsaechliche Image-ID des gezogenen Images vom laufenden Container unterscheidet. Das funktioniert damit auch sauber mit `latest`.
 
 Für lokales Testen mit einem frischen Build aus dem aktuellen Repo gibt es zusätzlich [docker-compose.local.yml](/Users/lj/PycharmProjects/captains_log/docker-compose.local.yml).
 

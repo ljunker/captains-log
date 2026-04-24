@@ -164,9 +164,9 @@ def target_image_ref(repository: str, version: str) -> str:
     return f"{repository}:{version}"
 
 
-def get_running_image_ref(container_name: str = DEFAULT_CONTAINER_NAME) -> str | None:
+def get_running_container_image_id(container_name: str = DEFAULT_CONTAINER_NAME) -> str | None:
     result = subprocess.run(
-        ["docker", "inspect", "--format", "{{.Config.Image}}", container_name],
+        ["docker", "inspect", "--format", "{{.Image}}", container_name],
         check=False,
         capture_output=True,
         text=True,
@@ -174,8 +174,22 @@ def get_running_image_ref(container_name: str = DEFAULT_CONTAINER_NAME) -> str |
     if result.returncode != 0:
         return None
 
-    image_ref = result.stdout.strip()
-    return image_ref or None
+    image_id = result.stdout.strip()
+    return image_id or None
+
+
+def get_local_image_id(image_ref: str) -> str | None:
+    result = subprocess.run(
+        ["docker", "image", "inspect", "--format", "{{.Id}}", image_ref],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+
+    image_id = result.stdout.strip()
+    return image_id or None
 
 
 def run_command(command: list[str], environment: dict[str, str], dry_run: bool) -> None:
@@ -186,10 +200,22 @@ def run_command(command: list[str], environment: dict[str, str], dry_run: bool) 
     subprocess.run(command, check=True, env=environment)
 
 
-def deploy(repository: str, version: str, dry_run: bool) -> None:
+def deploy(repository: str, version: str, dry_run: bool) -> bool:
     environment = build_compose_env(repository, version)
     run_command(["docker", "compose", "pull", "app"], environment, dry_run=dry_run)
+    if dry_run:
+        run_command(["docker", "compose", "up", "-d", "app"], environment, dry_run=dry_run)
+        return True
+
+    requested_image = target_image_ref(repository, version)
+    current_image_id = get_running_container_image_id()
+    pulled_image_id = get_local_image_id(requested_image)
+    if current_image_id is not None and pulled_image_id is not None and current_image_id == pulled_image_id:
+        print(f"Container already runs pulled image {requested_image} ({pulled_image_id}); skipping docker compose up.")
+        return False
+
     run_command(["docker", "compose", "up", "-d", "app"], environment, dry_run=dry_run)
+    return True
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -225,12 +251,6 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Warning: {latest_error}", file=sys.stderr)
 
     if args.check_only:
-        return 0
-
-    current_image = get_running_image_ref()
-    requested_image = target_image_ref(repository, configured_version)
-    if current_image == requested_image:
-        print(f"Container already runs {requested_image}; skipping docker compose up.")
         return 0
 
     deploy(repository, configured_version, dry_run=args.dry_run)
